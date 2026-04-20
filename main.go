@@ -10,72 +10,127 @@ import (
 	"strings"
 )
 
+type actionRequest struct {
+	PlayerIndex int
+	Revision    int
+	Actions     []engine.Action
+}
+
+type submittedAction struct {
+	PlayerIndex int
+	Revision    int
+	Action      engine.Action
+}
+
 func main() {
 	game := engine.NewGame([]engine.Player{
 		engine.NewPlayer("Jair", engine.SampleDeck()),
 		engine.NewPlayer("Skyler", engine.SampleDeck()),
 	})
-	legalActionsCh := make(chan []engine.Action)
-	aiChosenActionCh := make(chan engine.Action)
 
-	// Skyler AI
+	playerRequests := []chan actionRequest{
+		make(chan actionRequest),
+		make(chan actionRequest),
+	}
+	submittedActions := make(chan submittedAction)
+
+	scanner := bufio.NewScanner(os.Stdin)
+
 	go func() {
-		for actions := range legalActionsCh {
+		for req := range playerRequests[0] {
+			if len(req.Actions) == 0 {
+				continue
+			}
+
+			fmt.Print("choose action number: ")
+			for {
+				if !scanner.Scan() {
+					panic("failed to read input")
+				}
+
+				input := strings.TrimSpace(scanner.Text())
+				choice, err := strconv.Atoi(input)
+				if err != nil || choice < 0 || choice >= len(req.Actions) {
+					fmt.Print("invalid choice, enter a listed number: ")
+					continue
+				}
+
+				submittedActions <- submittedAction{
+					PlayerIndex: req.PlayerIndex,
+					Revision:    req.Revision,
+					Action:      req.Actions[choice],
+				}
+				break
+			}
+		}
+	}()
+
+	go func() {
+		for req := range playerRequests[1] {
+			if len(req.Actions) == 0 {
+				continue
+			}
+
 			var preferred []engine.Action
-			for _, action := range actions {
-				if action.Type == engine.ActionTypePass {
+			for _, action := range req.Actions {
+				if action.Type == engine.ActionTypePassPriority {
 					continue
 				}
 				preferred = append(preferred, action)
 			}
 
+			chosenAction := req.Actions[0]
 			if len(preferred) > 0 {
-				aiChosenActionCh <- preferred[rand.IntN(len(preferred))]
-				continue
+				chosenAction = preferred[rand.IntN(len(preferred))]
 			}
 
-			aiChosenActionCh <- actions[0]
+			submittedActions <- submittedAction{
+				PlayerIndex: req.PlayerIndex,
+				Revision:    req.Revision,
+				Action:      chosenAction,
+			}
 		}
 	}()
 
-	scanner := bufio.NewScanner(os.Stdin)
-
+	revision := 0
 	for !game.IsOver() {
-		actions := game.LegalActions()
+		revision++
 		printGameState(game)
-		fmt.Println("legal actions:")
-		for i, action := range actions {
-			fmt.Printf("  %d. %s\n", i, describeAction(game, action))
+
+		actionsByPlayer := make([][]engine.Action, len(game.Players))
+		for playerIndex := range game.Players {
+			actionsByPlayer[playerIndex] = game.LegalActionsForPlayer(playerIndex)
 		}
 
-		activePlayer := game.Players[game.ActivePlayer]
-		if activePlayer.Name == "Skyler" {
-			legalActionsCh <- actions
-			action := <-aiChosenActionCh
-			fmt.Printf("Skyler chooses: %s\n", describeAction(game, action))
-			if err := game.Apply(action); err != nil {
-				panic(err)
+		for playerIndex := range game.Players {
+			fmt.Printf("legal actions for %s:\n", game.Players[playerIndex].Name)
+			for i, action := range actionsByPlayer[playerIndex] {
+				fmt.Printf("  %d. %s\n", i, describeAction(game, playerIndex, action))
 			}
-			fmt.Println(game.LastResolvedActionLog)
-			fmt.Println()
-			continue
 		}
 
-		fmt.Print("choose action number: ")
+		for playerIndex := range game.Players {
+			playerRequests[playerIndex] <- actionRequest{
+				PlayerIndex: playerIndex,
+				Revision:    revision,
+				Actions:     actionsByPlayer[playerIndex],
+			}
+		}
+
 		for {
-			if !scanner.Scan() {
-				panic("failed to read input")
+			submitted := <-submittedActions
+			if submitted.Revision != revision {
+				continue
 			}
-
-			input := strings.TrimSpace(scanner.Text())
-			choice, err := strconv.Atoi(input)
-			if err != nil || choice < 0 || choice >= len(actions) {
-				fmt.Print("invalid choice, enter a listed number: ")
+			if submitted.PlayerIndex != game.PriorityPlayerIndex() {
 				continue
 			}
 
-			action := actions[choice]
-			if err := game.Apply(action); err != nil {
+			if submitted.PlayerIndex == 1 {
+				fmt.Printf("Skyler chooses: %s\n", describeAction(game, submitted.PlayerIndex, submitted.Action))
+			}
+
+			if err := game.Apply(submitted.Action); err != nil {
 				panic(err)
 			}
 			fmt.Println(game.LastResolvedActionLog)
@@ -84,7 +139,9 @@ func main() {
 		}
 	}
 
-	close(legalActionsCh)
+	for _, requests := range playerRequests {
+		close(requests)
+	}
 
 	winner, ok := game.Winner()
 	if !ok {

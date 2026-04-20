@@ -22,7 +22,14 @@ const (
 	ActionTypePlayLand        ActionType = "play_land"
 	ActionTypeActivateAbility ActionType = "activate_ability"
 	ActionTypeCastSpell       ActionType = "cast_spell"
-	ActionTypePass            ActionType = "pass"
+	ActionTypePassPriority    ActionType = "pass_priority"
+)
+
+type Phase string
+
+const (
+	PhaseDraw Phase = "draw"
+	PhaseMain Phase = "main"
 )
 
 type Card struct {
@@ -62,7 +69,10 @@ type Action struct {
 
 type Game struct {
 	Players               []Player
-	ActivePlayer          int
+	TurnPlayer            int
+	PriorityPlayer        int
+	PriorityRoundStart    int
+	Phase                 Phase
 	Turn                  int
 	LandPlayedThisTurn    bool
 	WinnerIndex           int
