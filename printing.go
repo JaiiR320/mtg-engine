@@ -6,22 +6,35 @@ import (
 )
 
 func printGameState(game *engine.Game) {
-	turnPlayer := game.Players[game.TurnPlayerIndex()]
-	opponent := game.Players[(game.TurnPlayerIndex()+1)%len(game.Players)]
+	activePlayer := game.Players[game.ActivePlayerIndex()]
+	opponent := game.Players[(game.ActivePlayerIndex()+1)%len(game.Players)]
 	priorityPlayer := game.Players[game.PriorityPlayerIndex()]
 
 	fmt.Println("#")
 	fmt.Printf("turn %d\n", game.Turn)
 	fmt.Printf("phase: %s\n", game.Phase)
-	fmt.Printf("turn player: %s\n", turnPlayer.Name)
+	fmt.Printf("active player: %s\n", activePlayer.Name)
 	fmt.Printf("priority player: %s\n", priorityPlayer.Name)
-	fmt.Printf("%s: life=%d mana=%d hand=%d battlefield=%d graveyard=%d\n", turnPlayer.Name, turnPlayer.Life, turnPlayer.Mana, len(turnPlayer.Hand), len(turnPlayer.Battlefield), len(turnPlayer.Graveyard))
+	fmt.Printf("%s: life=%d mana=%d hand=%d battlefield=%d graveyard=%d\n", activePlayer.Name, activePlayer.Life, activePlayer.Mana, len(activePlayer.Hand), len(activePlayer.Battlefield), len(activePlayer.Graveyard))
 	fmt.Printf("%s: life=%d mana=%d hand=%d battlefield=%d graveyard=%d\n", opponent.Name, opponent.Life, opponent.Mana, len(opponent.Hand), len(opponent.Battlefield), len(opponent.Graveyard))
 	if game.LastResolvedActionLog != "" {
 		fmt.Printf("last action: %s\n", game.LastResolvedActionLog)
 	}
-	printHand(turnPlayer.Hand)
-	printBattlefield(turnPlayer.Battlefield)
+	printStack(game.Stack, game.Players)
+	printHand(activePlayer.Hand)
+	printBattlefield(activePlayer.Battlefield)
+}
+
+func printStack(stack []engine.StackObject, players []engine.Player) {
+	fmt.Println("stack:")
+	if len(stack) == 0 {
+		fmt.Println("  empty")
+		return
+	}
+	for i := len(stack) - 1; i >= 0; i-- {
+		stackObject := stack[i]
+		fmt.Printf("  [%d] %s controlled by %s\n", i, stackObject.Card.Name, players[stackObject.Controller].Name)
+	}
 }
 
 func printHand(hand []engine.Card) {

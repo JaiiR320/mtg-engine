@@ -6,6 +6,7 @@ type CardType string
 
 const (
 	CardTypeLand    CardType = "land"
+	CardTypeInstant CardType = "instant"
 	CardTypeSorcery CardType = "sorcery"
 )
 
@@ -49,6 +50,11 @@ type Permanent struct {
 	Tapped bool
 }
 
+type StackObject struct {
+	Controller int
+	Card       Card
+}
+
 type Player struct {
 	Name        string
 	Life        int
@@ -69,10 +75,11 @@ type Action struct {
 
 type Game struct {
 	Players               []Player
-	TurnPlayer            int
+	ActivePlayer          int
 	PriorityPlayer        int
-	PriorityRoundStart    int
+	ConsecutivePasses     int
 	Phase                 Phase
+	Stack                 []StackObject
 	Turn                  int
 	LandPlayedThisTurn    bool
 	WinnerIndex           int
