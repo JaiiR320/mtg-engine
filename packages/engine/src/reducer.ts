@@ -170,9 +170,12 @@ function mutate(
     case "zone.moveMany": {
       const removed = command.objectIds.map((objectId) => removeObject(state, objectId));
       const destination = getZone(state, command.to);
-      const moved = removed.map((found) =>
-        resetForZoneChange(found.object, { kind: command.kind, visibility: undefined }),
-      );
+      const moved = removed.map((found) => {
+        if (sameZone(found.zone, command.to)) {
+          return applyObjectOverrides(found.object, { kind: command.kind });
+        }
+        return resetForZoneChange(found.object, { kind: command.kind, visibility: undefined });
+      });
       moved.forEach((object, offset) =>
         insertObject(destination, object, command.insertIndex, offset),
       );

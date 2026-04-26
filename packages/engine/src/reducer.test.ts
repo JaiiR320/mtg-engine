@@ -192,6 +192,79 @@ describe("virtual table engine", () => {
     ]);
   });
 
+  it("moves many objects within the same zone without resetting object metadata", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair", library: ["One", "Two"] }] });
+    const first = game.players[0]!.zones.library.objects[0]!;
+    const second = game.players[0]!.zones.library.objects[1]!;
+
+    game = applyCommand(game, {
+      type: "object.setCounters",
+      objectId: first.objectId,
+      counters: [{ type: "test", amount: 1 }],
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setStatus",
+      objectId: first.objectId,
+      status: { faceDown: true },
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: first.objectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+
+    game = applyCommand(game, {
+      type: "zone.moveMany",
+      objectIds: [second.objectId, first.objectId],
+      to: { zone: "library", playerId: "p1" },
+      insertIndex: 0,
+    }).state;
+
+    const movedFirst = game.players[0]!.zones.library.objects[1]!;
+    expect(game.players[0]!.zones.library.objects.map((object) => object.name)).toEqual([
+      "Two",
+      "One",
+    ]);
+    expect(movedFirst.objectId).toBe(first.objectId);
+    expect(movedFirst.counters).toEqual([{ type: "test", amount: 1 }]);
+    expect(movedFirst.status.faceDown).toBe(true);
+    expect(movedFirst.visibility).toEqual({ revealedTo: "all" });
+  });
+
+  it("moves many objects across zones with zone-change resets", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair", library: ["One"] }] });
+    const original = game.players[0]!.zones.library.objects[0]!;
+
+    game = applyCommand(game, {
+      type: "object.setCounters",
+      objectId: original.objectId,
+      counters: [{ type: "test", amount: 1 }],
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setStatus",
+      objectId: original.objectId,
+      status: { faceDown: true },
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: original.objectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+
+    game = applyCommand(game, {
+      type: "zone.moveMany",
+      objectIds: [original.objectId],
+      to: { zone: "hand", playerId: "p1" },
+    }).state;
+
+    const moved = game.players[0]!.zones.hand.objects[0]!;
+    expect(moved.objectId).not.toBe(original.objectId);
+    expect(moved.cardId).toBe(original.cardId);
+    expect(moved.counters).toEqual([]);
+    expect(moved.status.faceDown).toBe(false);
+    expect(moved.visibility).toBeUndefined();
+  });
+
   it("moves represented cards onto and off the shared stack zone", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Lightning Bolt"] }] });
     const handObject = game.players[0]!.zones.hand.objects[0]!;
