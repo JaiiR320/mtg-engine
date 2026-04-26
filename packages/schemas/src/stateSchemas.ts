@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const playerIdSchema = z.string().min(1);
 export const cardIdSchema = z.string().min(1);
-export const stackItemIdSchema = z.string().min(1);
+export const objectIdSchema = z.string().min(1);
 
 export const zoneSchema = z.enum([
   "library",
@@ -36,30 +36,40 @@ export const stepSchema = z.enum([
 
 export const zonePositionSchema = z.enum(["top", "bottom"]);
 
+export const objectKindSchema = z.enum(["card", "token", "copy"]);
+
+export const stackObjectKindSchema = z.enum([
+  "spell",
+  "activatedAbility",
+  "triggeredAbility",
+  "copy",
+]);
+
 export const counterSchema = z.object({
   type: z.string().min(1),
   amount: z.number().int(),
 });
 
-export const cardInstanceSchema = z.object({
-  id: cardIdSchema,
+export const gameObjectSchema = z.object({
+  objectId: objectIdSchema,
+  cardId: cardIdSchema.optional(),
+  kind: objectKindSchema,
   ownerPlayerId: playerIdSchema,
-  controllerPlayerId: playerIdSchema,
+  controllerPlayerId: playerIdSchema.optional(),
   name: z.string().min(1),
+  counters: z.array(counterSchema),
   tapped: z.boolean(),
   faceDown: z.boolean(),
   flipped: z.boolean(),
-  counters: z.array(counterSchema),
+  phasedOut: z.boolean(),
   annotations: z.array(z.string()),
+  copySourceObjectId: objectIdSchema.optional(),
 });
 
 export const playerZonesSchema = z.object({
-  library: z.array(cardInstanceSchema),
-  hand: z.array(cardInstanceSchema),
-  battlefield: z.array(cardInstanceSchema),
-  graveyard: z.array(cardInstanceSchema),
-  exile: z.array(cardInstanceSchema),
-  command: z.array(cardInstanceSchema),
+  library: z.array(gameObjectSchema),
+  hand: z.array(gameObjectSchema),
+  graveyard: z.array(gameObjectSchema),
 });
 
 export const playerStateSchema = z.object({
@@ -70,11 +80,15 @@ export const playerStateSchema = z.object({
   zones: playerZonesSchema,
 });
 
-export const stackItemSchema = z.object({
-  id: stackItemIdSchema,
-  controllerPlayerId: playerIdSchema.optional(),
+export const stackObjectSchema = z.object({
+  objectId: objectIdSchema,
+  kind: stackObjectKindSchema,
   name: z.string().min(1),
-  sourceCardId: cardIdSchema.optional(),
+  description: z.string().optional(),
+  controllerPlayerId: playerIdSchema.optional(),
+  ownerPlayerId: playerIdSchema.optional(),
+  sourceObjectId: objectIdSchema.optional(),
+  representedCardId: cardIdSchema.optional(),
   annotations: z.array(z.string()),
 });
 
@@ -97,21 +111,26 @@ export const gameStateSchema = z.object({
   turnNumber: z.number().int().nonnegative().optional(),
   phase: phaseSchema.optional(),
   step: stepSchema.optional(),
-  stack: z.array(stackItemSchema),
+  battlefield: z.array(gameObjectSchema),
+  exile: z.array(gameObjectSchema),
+  command: z.array(gameObjectSchema),
+  stack: z.array(stackObjectSchema),
   eventLog: z.array(gameEventSchema),
 });
 
 export type PlayerId = z.infer<typeof playerIdSchema>;
 export type CardId = z.infer<typeof cardIdSchema>;
-export type StackItemId = z.infer<typeof stackItemIdSchema>;
+export type ObjectId = z.infer<typeof objectIdSchema>;
 export type Zone = z.infer<typeof zoneSchema>;
 export type Phase = z.infer<typeof phaseSchema>;
 export type Step = z.infer<typeof stepSchema>;
 export type ZonePosition = z.infer<typeof zonePositionSchema>;
 export type Counter = z.infer<typeof counterSchema>;
-export type CardInstance = z.infer<typeof cardInstanceSchema>;
+export type ObjectKind = z.infer<typeof objectKindSchema>;
+export type StackObjectKind = z.infer<typeof stackObjectKindSchema>;
+export type GameObject = z.infer<typeof gameObjectSchema>;
 export type PlayerZones = z.infer<typeof playerZonesSchema>;
 export type PlayerState = z.infer<typeof playerStateSchema>;
-export type StackItem = z.infer<typeof stackItemSchema>;
+export type StackObject = z.infer<typeof stackObjectSchema>;
 export type GameEvent = z.infer<typeof gameEventSchema>;
 export type GameState = z.infer<typeof gameStateSchema>;

@@ -16,6 +16,8 @@ describe("virtual table engine", () => {
 
     expect(game.players).toHaveLength(4);
     expect(game.players[0]?.zones.library[0]?.name).toBe("Lightning Bolt");
+    expect(game.players[0]?.zones.library[0]?.cardId).toBeDefined();
+    expect(game.players[0]?.zones.library[0]?.objectId).toBeDefined();
     expect(game.activePlayerId).toBe(game.players[0]?.id);
     expect(toGameView(game).viewMode).toBe("debug");
   });
@@ -35,20 +37,31 @@ describe("virtual table engine", () => {
 
   it("moves cards between zones and toggles card state", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Mountain"] }] });
-    const cardId = game.players[0]!.zones.hand[0]!.id;
+    const original = game.players[0]!.zones.hand[0]!;
 
     game = applyCommand(game, {
       type: "card.move",
-      cardId,
+      objectId: original.objectId,
       toPlayerId: "p1",
       toZone: "battlefield",
     }).state;
-    game = applyCommand(game, { type: "card.tap", cardId }).state;
-    game = applyCommand(game, { type: "card.setFaceDown", cardId, faceDown: true }).state;
-    game = applyCommand(game, { type: "card.setFlipped", cardId, flipped: true }).state;
+    const moved = game.battlefield[0]!;
+    game = applyCommand(game, { type: "card.tap", objectId: moved.objectId }).state;
+    game = applyCommand(game, {
+      type: "card.setFaceDown",
+      objectId: moved.objectId,
+      faceDown: true,
+    }).state;
+    game = applyCommand(game, {
+      type: "card.setFlipped",
+      objectId: moved.objectId,
+      flipped: true,
+    }).state;
 
-    const permanent = game.players[0]?.zones.battlefield[0];
+    const permanent = game.battlefield[0];
     expect(permanent?.name).toBe("Mountain");
+    expect(permanent?.cardId).toBe(original.cardId);
+    expect(permanent?.objectId).not.toBe(original.objectId);
     expect(permanent?.tapped).toBe(true);
     expect(permanent?.faceDown).toBe(true);
     expect(permanent?.flipped).toBe(true);
@@ -56,22 +69,44 @@ describe("virtual table engine", () => {
 
   it("adds and removes counters", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", battlefield: ["Goblin Guide"] }] });
-    const cardId = game.players[0]!.zones.battlefield[0]!.id;
+    const objectId = game.battlefield[0]!.objectId;
 
     game = applyCommand(game, {
       type: "card.addCounter",
-      cardId,
+      objectId,
       counterType: "+1/+1",
       amount: 3,
     }).state;
     game = applyCommand(game, {
       type: "card.removeCounter",
-      cardId,
+      objectId,
       counterType: "+1/+1",
       amount: 1,
     }).state;
 
-    expect(game.players[0]?.zones.battlefield[0]?.counters).toEqual([{ type: "+1/+1", amount: 2 }]);
+    expect(game.battlefield[0]?.counters).toEqual([{ type: "+1/+1", amount: 2 }]);
+  });
+
+  it("clears counters and status on zone changes", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair", battlefield: ["Bear Cub"] }] });
+    const battlefieldObjectId = game.battlefield[0]!.objectId;
+
+    game = applyCommand(game, { type: "card.tap", objectId: battlefieldObjectId }).state;
+    game = applyCommand(game, {
+      type: "card.addCounter",
+      objectId: battlefieldObjectId,
+      counterType: "+1/+1",
+    }).state;
+    game = applyCommand(game, {
+      type: "card.move",
+      objectId: battlefieldObjectId,
+      toZone: "graveyard",
+    }).state;
+
+    const graveyardObject = game.players[0]!.zones.graveyard[0]!;
+    expect(graveyardObject.objectId).not.toBe(battlefieldObjectId);
+    expect(graveyardObject.counters).toEqual([]);
+    expect(graveyardObject.tapped).toBe(false);
   });
 
   it("adjusts life and updates turn and priority state", () => {
@@ -127,9 +162,35 @@ describe("virtual table engine", () => {
     game = applyCommand(game, { type: "stack.resolveTop" }).state;
     expect(game.stack.map((item) => item.name)).toEqual(["Lightning Bolt"]);
 
-    const stackItemId = game.stack[0]!.id;
-    game = applyCommand(game, { type: "stack.remove", stackItemId }).state;
+    const stackObjectId = game.stack[0]!.objectId;
+    game = applyCommand(game, { type: "stack.remove", objectId: stackObjectId }).state;
     expect(game.stack).toHaveLength(0);
+  });
+
+  it("creates tokens and copies objects", () => {
+    let game = createGame({
+      players: [{ id: "p1", name: "Jair", battlefield: ["Grizzly Bears"] }],
+    });
+    const sourceObjectId = game.battlefield[0]!.objectId;
+
+    game = applyCommand(game, { type: "token.create", ownerPlayerId: "p1", name: "Food" }).state;
+    game = applyCommand(game, {
+      type: "object.copy",
+      sourceObjectId,
+      destination: "battlefield",
+      controllerPlayerId: "p1",
+    }).state;
+    game = applyCommand(game, {
+      type: "object.copy",
+      sourceObjectId,
+      destination: "stack",
+      controllerPlayerId: "p1",
+    }).state;
+
+    expect(game.battlefield.at(-2)?.kind).toBe("token");
+    expect(game.battlefield.at(-2)?.cardId).toBeUndefined();
+    expect(game.battlefield.at(-1)?.copySourceObjectId).toBe(sourceObjectId);
+    expect(game.stack.at(-1)?.kind).toBe("copy");
   });
 
   it("replaces the entire game state", () => {
@@ -146,8 +207,8 @@ describe("virtual table engine", () => {
   it("rejects structurally valid commands that reference missing IDs", () => {
     const game = createGame({ players: [{ id: "p1", name: "Jair" }] });
 
-    expect(() => applyCommand(game, { type: "card.tap", cardId: "missing" })).toThrow(
-      "card not found",
+    expect(() => applyCommand(game, { type: "card.tap", objectId: "missing" })).toThrow(
+      "object not found",
     );
   });
 });

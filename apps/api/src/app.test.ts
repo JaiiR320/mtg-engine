@@ -24,6 +24,9 @@ describe("api", () => {
     const body = await created.json();
     expect(body.view.viewMode).toBe("debug");
     expect(body.view.players[0].zones.library[0].name).toBe("Opt");
+    expect(body.view.players[0].zones.library[0].objectId).toBeDefined();
+    expect(body.view.players[0].zones.library[0].cardId).toBeDefined();
+    expect(body.view.battlefield).toEqual([]);
   });
 
   it("validates and applies commands", async () => {
@@ -44,6 +47,7 @@ describe("api", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.view.players[0].zones.hand[0].name).toBe("Opt");
+    expect(body.view.players[0].zones.hand[0].objectId).toBeDefined();
     expect(body.event.type).toBe("card.draw");
   });
 
