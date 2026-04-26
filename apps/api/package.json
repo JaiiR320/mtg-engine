@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.1",
-    "@mtg-engine/engine": "workspace:*",
+    "@mtg-engine/core": "workspace:*",
     "@mtg-engine/schemas": "workspace:*",
     "hono": "^4.7.7",
     "zod": "^3.24.3"

@@ -12,7 +12,7 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@mtg-engine/engine": ["packages/engine/src/index.ts"],
+      "@mtg-engine/core": ["packages/core/src/index.ts"],
       "@mtg-engine/schemas": ["packages/schemas/src/index.ts"]
     }
   }

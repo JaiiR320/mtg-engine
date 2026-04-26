@@ -1,5 +1,5 @@
 {
-  "name": "@mtg-engine/engine",
+  "name": "@mtg-engine/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",

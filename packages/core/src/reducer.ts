@@ -37,6 +37,7 @@ const defaultStatus: ObjectStatus = {
 export function applyCommand(current: GameState, command: GameCommand): ApplyCommandResult {
   if (command.type === "state.replace") {
     const nextState = gameStateSchema.parse(structuredClone(command.state));
+    validateLiveStatePlayerReferences(nextState);
     const event = createEvent(nextState.revision + 1, command, "Replaced the full game state");
     nextState.revision = event.revision;
     nextState.eventLog = [...nextState.eventLog, event];
@@ -220,9 +221,59 @@ type ObjectLocation = {
 };
 
 function requirePlayer(state: GameState, playerId: string): PlayerState {
+  validatePlayerReference(playerIdsFor(state), playerId);
   const player = state.players.find((candidate) => candidate.id === playerId);
-  if (!player) throw new GameCommandError(`player not found: ${playerId}`);
-  return player;
+  return player!;
+}
+
+function playerIdsFor(state: GameState): Set<string> {
+  return new Set(state.players.map((player) => player.id));
+}
+
+function validatePlayerReference(
+  playerIds: ReadonlySet<string>,
+  playerId: string | undefined,
+  label = "player",
+): void {
+  if (playerId !== undefined && !playerIds.has(playerId)) {
+    throw new GameCommandError(`${label} not found: ${playerId}`);
+  }
+}
+
+function validateLiveStatePlayerReferences(state: GameState): void {
+  const playerIds = new Set<string>();
+  for (const player of state.players) {
+    if (playerIds.has(player.id)) throw new GameCommandError(`duplicate player id: ${player.id}`);
+    playerIds.add(player.id);
+  }
+
+  validatePlayerReference(playerIds, state.activePlayerId, "active player");
+  validatePlayerReference(playerIds, state.priorityPlayerId, "priority player");
+
+  for (const player of state.players) {
+    for (const zone of allPlayerZones()) {
+      validateZonePlayerReferences(playerIds, player.zones[zone]);
+    }
+  }
+
+  for (const zone of allSharedZones()) {
+    validateZonePlayerReferences(playerIds, state.zones[zone]);
+  }
+}
+
+function validateZonePlayerReferences(playerIds: ReadonlySet<string>, zone: ZoneState): void {
+  for (const object of zone.objects) {
+    validateObjectPlayerReferences(playerIds, object);
+  }
+}
+
+function validateObjectPlayerReferences(playerIds: ReadonlySet<string>, object: GameObject): void {
+  validatePlayerReference(playerIds, object.ownerPlayerId, "owner player");
+  validatePlayerReference(playerIds, object.controllerPlayerId, "controller player");
+  if (!object.visibility || object.visibility.revealedTo === "all") return;
+  object.visibility.revealedTo.forEach((playerId) =>
+    validatePlayerReference(playerIds, playerId, "visibility player"),
+  );
 }
 
 function getZone(state: GameState, zoneRef: ZoneRef): ZoneState {

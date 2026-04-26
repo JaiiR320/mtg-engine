@@ -247,6 +247,36 @@ describe("virtual table engine", () => {
     expect(game.players[0]!.zones.hand.objects[0]?.visibility).toEqual({ revealedTo: "all" });
   });
 
+  it("clears visibility only for library shuffles", () => {
+    let game = createGame({
+      players: [{ id: "p1", name: "Jair", library: ["One"], hand: ["Two"] }],
+    });
+    const libraryObjectId = game.players[0]!.zones.library.objects[0]!.objectId;
+    const handObjectId = game.players[0]!.zones.hand.objects[0]!.objectId;
+
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: libraryObjectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: handObjectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+    game = applyCommand(game, {
+      type: "zone.shuffle",
+      zone: { zone: "library", playerId: "p1" },
+    }).state;
+    game = applyCommand(game, {
+      type: "zone.shuffle",
+      zone: { zone: "hand", playerId: "p1" },
+    }).state;
+
+    expect(game.players[0]!.zones.library.objects[0]?.visibility).toBeUndefined();
+    expect(game.players[0]!.zones.hand.objects[0]?.visibility).toEqual({ revealedTo: "all" });
+  });
+
   it("moves many objects within the same zone without resetting object metadata", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", library: ["One", "Two"] }] });
     const first = game.players[0]!.zones.library.objects[0]!;
@@ -389,6 +419,8 @@ describe("virtual table engine", () => {
     expect(game.zones.battlefield.objects.at(-1)?.ownerPlayerId).toBe("p2");
     expect(game.zones.battlefield.objects.at(-1)?.controllerPlayerId).toBe("p1");
     expect(game.zones.stack.objects[0]?.kind).toBe("copy");
+    expect(game.zones.stack.objects[0]?.ownerPlayerId).toBe("p1");
+    expect(game.zones.stack.objects[0]?.controllerPlayerId).toBe("p1");
   });
 
   it("sets and clears visibility, controller, owner, and annotations", () => {
@@ -416,10 +448,12 @@ describe("virtual table engine", () => {
       objectId,
       controllerPlayerId: null,
     }).state;
+    game = applyCommand(game, { type: "object.setOwner", objectId, ownerPlayerId: null }).state;
     game = applyCommand(game, { type: "object.setVisibility", objectId, visibility: null }).state;
 
     expect(game.players[0]!.zones.hand.objects[0]?.visibility).toBeUndefined();
     expect(game.players[0]!.zones.hand.objects[0]?.annotations).toEqual(["chosen"]);
+    expect(game.players[0]!.zones.hand.objects[0]?.ownerPlayerId).toBeUndefined();
     expect(game.players[0]!.zones.hand.objects[0]?.controllerPlayerId).toBeUndefined();
   });
 
@@ -444,6 +478,70 @@ describe("virtual table engine", () => {
     expect(result.state.players[0]?.id).toBe("p2");
     expect(result.state.players[0]?.zones.hand.objects[0]?.name).toBe("Island");
     expect(result.state.eventLog.at(-1)?.type).toBe("state.replace");
+  });
+
+  it("rejects replacement states with invalid live player references", () => {
+    const game = createGame({ players: [{ id: "p1", name: "Jair" }] });
+
+    const withDuplicatePlayer = structuredClone(game);
+    withDuplicatePlayer.players.push(structuredClone(withDuplicatePlayer.players[0]!));
+    expect(() => applyCommand(game, { type: "state.replace", state: withDuplicatePlayer })).toThrow(
+      "duplicate player id",
+    );
+
+    const withMissingActivePlayer = structuredClone(game);
+    withMissingActivePlayer.activePlayerId = "missing";
+    expect(() =>
+      applyCommand(game, { type: "state.replace", state: withMissingActivePlayer }),
+    ).toThrow("active player not found");
+
+    const withMissingPriorityPlayer = structuredClone(game);
+    withMissingPriorityPlayer.priorityPlayerId = "missing";
+    expect(() =>
+      applyCommand(game, { type: "state.replace", state: withMissingPriorityPlayer }),
+    ).toThrow("priority player not found");
+
+    const withMissingOwner = createGame({
+      players: [{ id: "p1", name: "Jair", hand: ["Island"] }],
+    });
+    withMissingOwner.players[0]!.zones.hand.objects[0]!.ownerPlayerId = "missing";
+    expect(() => applyCommand(game, { type: "state.replace", state: withMissingOwner })).toThrow(
+      "owner player not found",
+    );
+
+    const withMissingController = createGame({
+      players: [{ id: "p1", name: "Jair", hand: ["Island"] }],
+    });
+    withMissingController.players[0]!.zones.hand.objects[0]!.controllerPlayerId = "missing";
+    expect(() =>
+      applyCommand(game, { type: "state.replace", state: withMissingController }),
+    ).toThrow("controller player not found");
+
+    const withMissingVisibilityPlayer = createGame({
+      players: [{ id: "p1", name: "Jair", hand: ["Island"] }],
+    });
+    withMissingVisibilityPlayer.players[0]!.zones.hand.objects[0]!.visibility = {
+      revealedTo: ["missing"],
+    };
+    expect(() =>
+      applyCommand(game, { type: "state.replace", state: withMissingVisibilityPlayer }),
+    ).toThrow("visibility player not found");
+  });
+
+  it("does not reject replacement states for historical event actors", () => {
+    const game = createGame({ players: [{ id: "p1", name: "Jair" }] });
+    const replacement = structuredClone(game);
+    replacement.eventLog.push({
+      id: "event_1",
+      revision: 1,
+      timestamp: new Date().toISOString(),
+      type: "note.add",
+      actorPlayerId: "missing",
+      message: "from old history",
+      commandType: "note.add",
+    });
+
+    expect(() => applyCommand(game, { type: "state.replace", state: replacement })).not.toThrow();
   });
 
   it("rejects structurally valid commands that reference missing IDs", () => {

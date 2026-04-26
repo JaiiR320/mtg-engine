@@ -3,9 +3,9 @@
 MTG Engine is a TypeScript workspace for tracking a Magic: The Gathering table state.
 It provides:
 
-- A small engine package for creating game state and applying table commands.
+- A runtime-agnostic core package for creating game state and applying table commands in any TypeScript host.
 - Zod schemas for validating state, commands, API responses, and stream messages.
-- A Hono API app that stores one in-memory game and exposes HTTP endpoints.
+- A Hono API app that stores one in-memory game and exposes HTTP endpoints as an optional host around core.
 - Local Markdown copies of Magic rules under `rules/` for rules research and reference.
 
 ## Docs
@@ -19,7 +19,8 @@ It provides:
 
 - Tracks players, life totals, counters, turns, priority, zones, objects, and event history.
 - Supports common table operations such as moving objects, shuffling zones, creating tokens, copying objects, setting visibility, and replacing state.
-- Validates request and command shape with Zod before API commands reach the engine.
+- Creates and transforms plain state objects with `createGame` and `applyCommand`.
+- Validates request and command shape with Zod when callers use the shared schemas.
 - Returns a debug view of the full game state.
 
 ## What It Does Not Do Yet

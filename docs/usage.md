@@ -2,6 +2,24 @@
 
 This repo uses `pnpm` workspaces and TypeScript.
 
+## Use the Core Package
+
+Core is a runtime-agnostic TypeScript state library. A host can use it directly without the HTTP API:
+
+```ts
+import { applyCommand, createGame } from "@mtg-engine/core";
+
+let game = createGame({ players: [{ id: "p1", name: "Jair", library: ["Opt"] }] });
+
+game = applyCommand(game, {
+  type: "object.move",
+  objectId: game.players[0]!.zones.library.objects[0]!.objectId,
+  to: { zone: "hand", playerId: "p1" },
+}).state;
+```
+
+The Hono API below is one optional host around the same core package.
+
 ## Install
 
 ```sh

@@ -26,9 +26,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.14.1
         version: 1.19.14(hono@4.12.15)
-      '@mtg-engine/engine':
+      '@mtg-engine/core':
         specifier: workspace:*
-        version: link:../../packages/engine
+        version: link:../../packages/core
       '@mtg-engine/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -43,7 +43,7 @@ importers:
         specifier: ^4.19.4
         version: 4.21.0
 
-  packages/engine:
+  packages/core:
     dependencies:
       '@mtg-engine/schemas':
         specifier: workspace:*

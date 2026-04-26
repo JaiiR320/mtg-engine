@@ -5,7 +5,7 @@ const playerZones = ["library", "hand", "graveyard"] as const;
 const sharedZones = ["battlefield", "stack", "exile", "command"] as const;
 
 export function createGame(request: NewGameRequest): GameState {
-  const players = request.players.map((player, index): PlayerState => {
+  const players = request.players.map((player): PlayerState => {
     const playerId = player.id ?? createId("player");
 
     return {

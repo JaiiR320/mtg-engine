@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZodError } from "zod";
-import { GameCommandError } from "@mtg-engine/engine";
+import { GameCommandError } from "@mtg-engine/core";
 import { gameCommandSchema, newGameRequestSchema } from "@mtg-engine/schemas";
 import { EventBus } from "./eventBus.js";
 import { GameStore } from "./gameStore.js";

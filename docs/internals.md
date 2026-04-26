@@ -2,13 +2,15 @@
 
 ## Workspace Packages
 
-- `packages/schemas`: Zod schemas and TypeScript types shared by the engine and API.
-- `packages/engine`: pure game-state creation, command application, events, IDs, and debug views.
-- `apps/api`: Hono HTTP server, in-memory store, and event bus.
+- `packages/schemas`: Zod schemas and TypeScript types shared by core consumers and the API.
+- `packages/core`: runtime-agnostic game-state creation, command application, events, IDs, and debug views.
+- `apps/api`: optional Hono HTTP server, in-memory store, and event bus built around the core package.
+
+Core is a TypeScript state library, not a backend. Hosts can call `createGame`, `applyCommand`, and `toGameView` directly in a browser, server, worker, test, or API wrapper.
 
 ## State Model
 
-The engine tracks one game state with ID `single`.
+Core tracks one game state with ID `single`.
 
 Game state contains:
 
@@ -57,7 +59,7 @@ This means views expose all zones and hidden information. Add private or player-
 
 ## API Store
 
-`GameStore` is an in-memory store with a single current state.
+`GameStore` is an optional in-memory host with a single current state.
 
 - Server restart loses game state.
 - `POST /game/new` replaces the current state.

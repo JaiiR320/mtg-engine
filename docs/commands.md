@@ -87,6 +87,8 @@ Clear optional object fields with explicit `null`:
 - `zone.shuffle`: shuffle a zone.
 - `zone.moveMany`: move one or more objects to a destination zone.
 
+For same-zone `zone.moveMany`, the listed objects are removed first. `insertIndex` is then applied to the zone after those removals, and moved objects are inserted in `objectIds` order.
+
 ```json
 {
   "type": "zone.moveMany",
@@ -116,4 +118,4 @@ Clear optional object fields with explicit `null`:
 - `note.add`: add an event-log note without changing state.
 - `state.replace`: replace the entire validated game state.
 
-Use `state.replace` carefully. It validates structure, then records a replacement event and increments the replacement state's revision.
+Use `state.replace` carefully. It validates structure and live player references, then records a replacement event and increments the replacement state's revision. Active player, priority player, object owner, object controller, and visibility references must point at current players; historical event log actors are not revalidated.

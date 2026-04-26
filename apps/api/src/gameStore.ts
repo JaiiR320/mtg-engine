@@ -1,4 +1,4 @@
-import { applyCommand, createGame, emptyGame, toGameView } from "@mtg-engine/engine";
+import { applyCommand, createGame, emptyGame, toGameView } from "@mtg-engine/core";
 import type {
   CommandResponse,
   GameCommand,
