@@ -80,6 +80,29 @@ describe("virtual table engine", () => {
     expect(permanent?.status).toMatchObject({ tapped: true, faceDown: true, flipped: true });
   });
 
+  it("validates visibility overrides when moving objects", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Island"] }] });
+    const objectId = game.players[0]!.zones.hand.objects[0]!.objectId;
+
+    expect(() =>
+      applyCommand(game, {
+        type: "object.move",
+        objectId,
+        to: { zone: "battlefield" },
+        visibility: { revealedTo: ["missing"] },
+      }),
+    ).toThrow("player not found");
+
+    game = applyCommand(game, {
+      type: "object.move",
+      objectId,
+      to: { zone: "battlefield" },
+      visibility: { revealedTo: ["p1"] },
+    }).state;
+
+    expect(game.zones.battlefield.objects[0]?.visibility).toEqual({ revealedTo: ["p1"] });
+  });
+
   it("sets object and player counters", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", battlefield: ["Goblin Guide"] }] });
     const objectId = game.zones.battlefield.objects[0]!.objectId;
@@ -190,6 +213,38 @@ describe("virtual table engine", () => {
       "One",
       "Two",
     ]);
+  });
+
+  it("clears visibility only for library order changes", () => {
+    let game = createGame({
+      players: [{ id: "p1", name: "Jair", library: ["One"], hand: ["Two"] }],
+    });
+    const libraryObjectId = game.players[0]!.zones.library.objects[0]!.objectId;
+    const handObjectId = game.players[0]!.zones.hand.objects[0]!.objectId;
+
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: libraryObjectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setVisibility",
+      objectId: handObjectId,
+      visibility: { revealedTo: "all" },
+    }).state;
+    game = applyCommand(game, {
+      type: "zone.reorder",
+      zone: { zone: "library", playerId: "p1" },
+      objectIds: [libraryObjectId],
+    }).state;
+    game = applyCommand(game, {
+      type: "zone.reorder",
+      zone: { zone: "hand", playerId: "p1" },
+      objectIds: [handObjectId],
+    }).state;
+
+    expect(game.players[0]!.zones.library.objects[0]?.visibility).toBeUndefined();
+    expect(game.players[0]!.zones.hand.objects[0]?.visibility).toEqual({ revealedTo: "all" });
   });
 
   it("moves many objects within the same zone without resetting object metadata", () => {

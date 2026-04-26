@@ -84,6 +84,7 @@ function mutate(
         ? resetForZoneChange(found.object, command)
         : applyObjectOverrides(found.object, command);
       validateObjectPlayers(state, moved);
+      validateVisibility(state, moved.visibility);
       insertObject(destination, moved, command.insertIndex);
       return `Moved ${moved.name} to ${zoneLabel(state, command.to)}`;
     }
@@ -158,13 +159,13 @@ function mutate(
         if (!object) throw new GameCommandError(`object not found in zone: ${objectId}`);
         return object;
       });
-      if (isHiddenZone(command.zone)) clearZoneVisibility(zone);
+      if (shouldClearVisibilityForZoneOrderChange(command.zone)) clearZoneVisibility(zone);
       return `Reordered ${zoneLabel(state, command.zone)}`;
     }
     case "zone.shuffle": {
       const zone = getZone(state, command.zone);
       shuffle(zone.objects);
-      if (isHiddenZone(command.zone)) clearZoneVisibility(zone);
+      if (shouldClearVisibilityForZoneOrderChange(command.zone)) clearZoneVisibility(zone);
       return `Shuffled ${zoneLabel(state, command.zone)}`;
     }
     case "zone.moveMany": {
@@ -356,8 +357,8 @@ function sameZone(left: ZoneRef, right: ZoneRef): boolean {
   return left.zone === right.zone && left.playerId === right.playerId;
 }
 
-function isHiddenZone(zoneRef: ZoneRef): boolean {
-  return zoneRef.zone === "library" || zoneRef.zone === "hand";
+function shouldClearVisibilityForZoneOrderChange(zoneRef: ZoneRef): boolean {
+  return zoneRef.zone === "library";
 }
 
 function clearZoneVisibility(zone: ZoneState): void {
