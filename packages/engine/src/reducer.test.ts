@@ -211,7 +211,10 @@ describe("virtual table engine", () => {
 
   it("creates tokens, copies objects, and sets metadata", () => {
     let game = createGame({
-      players: [{ id: "p1", name: "Jair", battlefield: ["Grizzly Bears"] }],
+      players: [
+        { id: "p1", name: "Jair", battlefield: ["Grizzly Bears"] },
+        { id: "p2", name: "Skyler" },
+      ],
     });
     const sourceObjectId = game.zones.battlefield.objects[0]!.objectId;
 
@@ -224,6 +227,7 @@ describe("virtual table engine", () => {
       type: "object.copy",
       sourceObjectId,
       to: { zone: "battlefield" },
+      ownerPlayerId: "p2",
       controllerPlayerId: "p1",
     }).state;
     game = applyCommand(game, {
@@ -237,10 +241,12 @@ describe("virtual table engine", () => {
     expect(game.zones.battlefield.objects.at(-2)?.kind).toBe("token");
     expect(game.zones.battlefield.objects.at(-2)?.cardId).toBeUndefined();
     expect(game.zones.battlefield.objects.at(-1)?.copySourceObjectId).toBe(sourceObjectId);
+    expect(game.zones.battlefield.objects.at(-1)?.ownerPlayerId).toBe("p2");
+    expect(game.zones.battlefield.objects.at(-1)?.controllerPlayerId).toBe("p1");
     expect(game.zones.stack.objects[0]?.kind).toBe("copy");
   });
 
-  it("sets visibility, controller, owner, and annotations", () => {
+  it("sets and clears visibility, controller, owner, and annotations", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Island"] }] });
     const objectId = game.players[0]!.zones.hand.objects[0]!.objectId;
 
@@ -255,11 +261,33 @@ describe("virtual table engine", () => {
       annotations: ["chosen"],
     }).state;
     game = applyCommand(game, { type: "object.setOwner", objectId, ownerPlayerId: "p1" }).state;
-    game = applyCommand(game, { type: "object.setController", objectId }).state;
+    game = applyCommand(game, {
+      type: "object.setController",
+      objectId,
+      controllerPlayerId: "p1",
+    }).state;
+    game = applyCommand(game, {
+      type: "object.setController",
+      objectId,
+      controllerPlayerId: null,
+    }).state;
+    game = applyCommand(game, { type: "object.setVisibility", objectId, visibility: null }).state;
 
-    expect(game.players[0]!.zones.hand.objects[0]?.visibility).toEqual({ revealedTo: "all" });
+    expect(game.players[0]!.zones.hand.objects[0]?.visibility).toBeUndefined();
     expect(game.players[0]!.zones.hand.objects[0]?.annotations).toEqual(["chosen"]);
     expect(game.players[0]!.zones.hand.objects[0]?.controllerPlayerId).toBeUndefined();
+  });
+
+  it("requires explicit null to clear optional object fields", () => {
+    expect(
+      gameCommandSchema.safeParse({ type: "object.setController", objectId: "obj" }).success,
+    ).toBe(false);
+    expect(gameCommandSchema.safeParse({ type: "object.setOwner", objectId: "obj" }).success).toBe(
+      false,
+    );
+    expect(
+      gameCommandSchema.safeParse({ type: "object.setVisibility", objectId: "obj" }).success,
+    ).toBe(false);
   });
 
   it("replaces the entire game state", () => {

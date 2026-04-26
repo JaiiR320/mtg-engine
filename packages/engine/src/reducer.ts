@@ -101,7 +101,7 @@ function mutate(
         kind: command.kind ?? (command.to.zone === "stack" ? "copy" : "token"),
         name: command.name ?? source.name,
         description: command.description ?? source.description,
-        ownerPlayerId: controllerPlayerId ?? source.ownerPlayerId,
+        ownerPlayerId: command.ownerPlayerId ?? source.ownerPlayerId,
         controllerPlayerId,
         counters: [],
         status: structuredClone(source.status),
@@ -124,21 +124,20 @@ function mutate(
     }
     case "object.setController": {
       const { object } = findObject(state, command.objectId);
-      if (command.controllerPlayerId !== undefined)
-        requirePlayer(state, command.controllerPlayerId);
-      object.controllerPlayerId = command.controllerPlayerId;
+      if (command.controllerPlayerId !== null) requirePlayer(state, command.controllerPlayerId);
+      object.controllerPlayerId = command.controllerPlayerId ?? undefined;
       return `Set controller on ${object.name}`;
     }
     case "object.setOwner": {
       const { object } = findObject(state, command.objectId);
-      if (command.ownerPlayerId !== undefined) requirePlayer(state, command.ownerPlayerId);
-      object.ownerPlayerId = command.ownerPlayerId;
+      if (command.ownerPlayerId !== null) requirePlayer(state, command.ownerPlayerId);
+      object.ownerPlayerId = command.ownerPlayerId ?? undefined;
       return `Set owner on ${object.name}`;
     }
     case "object.setVisibility": {
       const { object } = findObject(state, command.objectId);
-      validateVisibility(state, command.visibility);
-      object.visibility = command.visibility;
+      validateVisibility(state, command.visibility ?? undefined);
+      object.visibility = command.visibility ?? undefined;
       return `Set visibility on ${object.name}`;
     }
     case "object.setAnnotations": {
@@ -380,8 +379,8 @@ function nextPlayerId(state: GameState, from?: string): string | undefined {
 function actorFor(command: Exclude<GameCommand, { type: "state.replace" }>): string | undefined {
   if ("actorPlayerId" in command) return command.actorPlayerId;
   if ("playerId" in command) return command.playerId;
-  if ("controllerPlayerId" in command) return command.controllerPlayerId;
-  if ("ownerPlayerId" in command) return command.ownerPlayerId;
+  if ("controllerPlayerId" in command) return command.controllerPlayerId ?? undefined;
+  if ("ownerPlayerId" in command) return command.ownerPlayerId ?? undefined;
   if ("object" in command) return command.object.controllerPlayerId ?? command.object.ownerPlayerId;
   return undefined;
 }

@@ -95,6 +95,7 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
     kind: objectKindSchema.optional(),
     name: z.string().min(1).optional(),
     description: z.string().optional(),
+    ownerPlayerId: playerIdSchema.optional(),
     controllerPlayerId: playerIdSchema.optional(),
   }),
   z.object({
@@ -110,17 +111,17 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("object.setController"),
     objectId: objectIdSchema,
-    controllerPlayerId: playerIdSchema.optional(),
+    controllerPlayerId: playerIdSchema.nullable(),
   }),
   z.object({
     type: z.literal("object.setOwner"),
     objectId: objectIdSchema,
-    ownerPlayerId: playerIdSchema.optional(),
+    ownerPlayerId: playerIdSchema.nullable(),
   }),
   z.object({
     type: z.literal("object.setVisibility"),
     objectId: objectIdSchema,
-    visibility: visibilityOverrideSchema.optional(),
+    visibility: visibilityOverrideSchema.nullable(),
   }),
   z.object({
     type: z.literal("object.setAnnotations"),
