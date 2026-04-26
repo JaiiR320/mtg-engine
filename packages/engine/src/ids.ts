@@ -1,9 +1,5 @@
-let nextId = 1;
+import { randomUUID } from "node:crypto";
 
 export function createId(prefix: string): string {
-  return `${prefix}_${nextId++}`;
-}
-
-export function resetIdsForTests(): void {
-  nextId = 1;
+  return `${prefix}_${randomUUID()}`;
 }

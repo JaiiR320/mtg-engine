@@ -8,6 +8,7 @@ export const zoneSchema = z.enum([
   "library",
   "hand",
   "battlefield",
+  "stack",
   "graveyard",
   "exile",
   "command",

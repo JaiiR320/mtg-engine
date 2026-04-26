@@ -77,6 +77,20 @@ function mutate(
     }
     case "card.move": {
       const found = removeObject(state, command.objectId);
+      if (command.toZone === "stack") {
+        state.stack.push({
+          objectId: createId("obj"),
+          kind: "spell",
+          controllerPlayerId:
+            command.toPlayerId ?? found.object.controllerPlayerId ?? found.object.ownerPlayerId,
+          ownerPlayerId: found.object.ownerPlayerId,
+          name: found.object.name,
+          representedCardId: found.object.cardId,
+          annotations: [],
+        });
+        return `Moved ${found.object.name} to the stack`;
+      }
+
       const destinationPlayerId = command.toPlayerId ?? found.object.ownerPlayerId;
       const moved = resetForZoneChange(found.object, {
         controllerPlayerId: command.toZone === "battlefield" ? destinationPlayerId : undefined,
@@ -307,6 +321,10 @@ function insertObject(
   playerId?: string,
   position: "top" | "bottom" = "bottom",
 ): void {
+  if (zone === "stack") {
+    throw new GameCommandError("use card.move to put represented cards on the stack");
+  }
+
   if (zone === "battlefield" || zone === "exile" || zone === "command") {
     insert(state[zone], object, position);
     return;
@@ -400,7 +418,8 @@ function actorFor(command: Exclude<GameCommand, { type: "state.replace" }>): str
 }
 
 function zoneLabel(state: GameState, zone: Zone, playerId?: string): string {
-  if (zone === "battlefield" || zone === "exile" || zone === "command") return zone;
+  if (zone === "battlefield" || zone === "exile" || zone === "command" || zone === "stack")
+    return zone;
   const player = playerId ? requirePlayer(state, playerId) : undefined;
   return player ? `${player.name}'s ${zone}` : zone;
 }

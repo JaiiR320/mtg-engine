@@ -1,9 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { applyCommand, createGame, resetIdsForTests, toGameView } from "./index.js";
+import { describe, expect, it } from "vitest";
+import { applyCommand, createGame, toGameView } from "./index.js";
 
 describe("virtual table engine", () => {
-  beforeEach(() => resetIdsForTests());
-
   it("creates a game with up to four players and named cards", () => {
     const game = createGame({
       players: [
@@ -165,6 +163,29 @@ describe("virtual table engine", () => {
     const stackObjectId = game.stack[0]!.objectId;
     game = applyCommand(game, { type: "stack.remove", objectId: stackObjectId }).state;
     expect(game.stack).toHaveLength(0);
+  });
+
+  it("moves represented cards onto the shared stack zone", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Lightning Bolt"] }] });
+    const handObject = game.players[0]!.zones.hand[0]!;
+
+    game = applyCommand(game, {
+      type: "card.move",
+      objectId: handObject.objectId,
+      toZone: "stack",
+      toPlayerId: "p1",
+    }).state;
+
+    expect(game.players[0]!.zones.hand).toHaveLength(0);
+    expect(game.stack).toHaveLength(1);
+    expect(game.stack[0]).toMatchObject({
+      kind: "spell",
+      name: "Lightning Bolt",
+      ownerPlayerId: "p1",
+      controllerPlayerId: "p1",
+      representedCardId: handObject.cardId,
+    });
+    expect(game.stack[0]!.objectId).not.toBe(handObject.objectId);
   });
 
   it("creates tokens and copies objects", () => {
