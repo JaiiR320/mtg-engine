@@ -1,12 +1,12 @@
 import type {
-  Counter,
   GameCommand,
   GameEvent,
   GameObject,
   GameState,
+  ObjectStatus,
   PlayerState,
-  Step,
-  Zone,
+  ZoneRef,
+  ZoneState,
 } from "@mtg-engine/schemas";
 import { gameStateSchema } from "@mtg-engine/schemas";
 import { createEvent } from "./events.js";
@@ -25,18 +25,12 @@ export type ApplyCommandResult = {
   event: GameEvent;
 };
 
-const stepOrder: Step[] = [
-  "untap",
-  "upkeep",
-  "draw",
-  "beginningOfCombat",
-  "declareAttackers",
-  "declareBlockers",
-  "combatDamage",
-  "endOfCombat",
-  "end",
-  "cleanup",
-];
+const defaultStatus: ObjectStatus = {
+  tapped: false,
+  faceDown: false,
+  flipped: false,
+  phasedOut: false,
+};
 
 export function applyCommand(current: GameState, command: GameCommand): ApplyCommandResult {
   if (command.type === "state.replace") {
@@ -66,64 +60,124 @@ function mutate(
       player.life += command.delta;
       return `${player.name} life ${formatDelta(command.delta)} to ${player.life}`;
     }
-    case "card.draw": {
+    case "player.setLife": {
       const player = requirePlayer(state, command.playerId);
-      const count = command.count ?? 1;
-      const drawn = player.zones.library
-        .splice(0, count)
-        .map((object) => resetForZoneChange(object));
-      player.zones.hand.push(...drawn);
-      return `${player.name} drew ${drawn.length} card${drawn.length === 1 ? "" : "s"}`;
+      player.life = command.life;
+      return `${player.name} life set to ${player.life}`;
     }
-    case "card.move": {
+    case "player.setCounters": {
+      const player = requirePlayer(state, command.playerId);
+      player.counters = structuredClone(command.counters);
+      return `Set counters on ${player.name}`;
+    }
+    case "object.create": {
+      const zone = getZone(state, command.to);
+      const object = normalizeCreatedObject(state, command.object);
+      insertObject(zone, object, command.insertIndex);
+      return `Created ${object.name} in ${zoneLabel(state, command.to)}`;
+    }
+    case "object.move": {
       const found = removeObject(state, command.objectId);
-      if (command.toZone === "stack") {
-        insertStackObject(
-          state,
-          {
-            objectId: createId("obj"),
-            kind: "spell",
-            controllerPlayerId:
-              command.toPlayerId ?? found.object.controllerPlayerId ?? found.object.ownerPlayerId,
-            ownerPlayerId: found.object.ownerPlayerId,
-            name: found.object.name,
-            representedCardId: found.object.cardId,
-            annotations: [],
-          },
-          command.position,
-        );
-        return `Moved ${found.object.name} to the stack`;
+      const destination = getZone(state, command.to);
+      const changedZone = !sameZone(found.zone, command.to);
+      const moved = changedZone
+        ? resetForZoneChange(found.object, command)
+        : applyObjectOverrides(found.object, command);
+      validateObjectPlayers(state, moved);
+      insertObject(destination, moved, command.insertIndex);
+      return `Moved ${moved.name} to ${zoneLabel(state, command.to)}`;
+    }
+    case "object.delete": {
+      const found = removeObject(state, command.objectId);
+      return `Deleted ${found.object.name}`;
+    }
+    case "object.copy": {
+      const source = findObject(state, command.sourceObjectId).object;
+      const destination = getZone(state, command.to);
+      const controllerPlayerId = command.controllerPlayerId ?? source.controllerPlayerId;
+      if (controllerPlayerId !== undefined) requirePlayer(state, controllerPlayerId);
+      const copy: GameObject = {
+        objectId: createId("obj"),
+        kind: command.kind ?? (command.to.zone === "stack" ? "copy" : "token"),
+        name: command.name ?? source.name,
+        description: command.description ?? source.description,
+        ownerPlayerId: controllerPlayerId ?? source.ownerPlayerId,
+        controllerPlayerId,
+        counters: [],
+        status: structuredClone(source.status),
+        annotations: [],
+        copySourceObjectId: source.objectId,
+      };
+      validateObjectPlayers(state, copy);
+      insertObject(destination, copy, command.insertIndex);
+      return `Copied ${source.name} to ${zoneLabel(state, command.to)}`;
+    }
+    case "object.setStatus": {
+      const { object } = findObject(state, command.objectId);
+      object.status = { ...object.status, ...command.status };
+      return `Set status on ${object.name}`;
+    }
+    case "object.setCounters": {
+      const { object } = findObject(state, command.objectId);
+      object.counters = structuredClone(command.counters);
+      return `Set counters on ${object.name}`;
+    }
+    case "object.setController": {
+      const { object } = findObject(state, command.objectId);
+      if (command.controllerPlayerId !== undefined)
+        requirePlayer(state, command.controllerPlayerId);
+      object.controllerPlayerId = command.controllerPlayerId;
+      return `Set controller on ${object.name}`;
+    }
+    case "object.setOwner": {
+      const { object } = findObject(state, command.objectId);
+      if (command.ownerPlayerId !== undefined) requirePlayer(state, command.ownerPlayerId);
+      object.ownerPlayerId = command.ownerPlayerId;
+      return `Set owner on ${object.name}`;
+    }
+    case "object.setVisibility": {
+      const { object } = findObject(state, command.objectId);
+      validateVisibility(state, command.visibility);
+      object.visibility = command.visibility;
+      return `Set visibility on ${object.name}`;
+    }
+    case "object.setAnnotations": {
+      const { object } = findObject(state, command.objectId);
+      object.annotations = structuredClone(command.annotations);
+      return `Set annotations on ${object.name}`;
+    }
+    case "zone.reorder": {
+      const zone = getZone(state, command.zone);
+      if (command.objectIds.length !== zone.objects.length) {
+        throw new GameCommandError("zone reorder must include every object exactly once");
       }
-
-      const destinationPlayerId = command.toPlayerId ?? found.object.ownerPlayerId;
-      const moved = resetForZoneChange(found.object, {
-        controllerPlayerId: command.toZone === "battlefield" ? destinationPlayerId : undefined,
-        faceDown: command.enterFaceDown,
-        flipped: command.enterFlipped,
-        tapped: command.enterTapped,
+      if (new Set(command.objectIds).size !== command.objectIds.length) {
+        throw new GameCommandError("zone reorder cannot contain duplicate object IDs");
+      }
+      zone.objects = command.objectIds.map((objectId) => {
+        const object = zone.objects.find((candidate) => candidate.objectId === objectId);
+        if (!object) throw new GameCommandError(`object not found in zone: ${objectId}`);
+        return object;
       });
-      insertObject(state, moved, command.toZone, destinationPlayerId, command.position);
-      return `Moved ${moved.name} to ${zoneLabel(state, command.toZone, destinationPlayerId)}`;
+      if (isHiddenZone(command.zone)) clearZoneVisibility(zone);
+      return `Reordered ${zoneLabel(state, command.zone)}`;
     }
-    case "card.tap":
-      return setObjectFlag(state, command.objectId, "tapped", true);
-    case "card.untap":
-      return setObjectFlag(state, command.objectId, "tapped", false);
-    case "card.setTapped":
-      return setObjectFlag(state, command.objectId, "tapped", command.tapped);
-    case "card.setFaceDown":
-      return setObjectFlag(state, command.objectId, "faceDown", command.faceDown);
-    case "card.setFlipped":
-      return setObjectFlag(state, command.objectId, "flipped", command.flipped);
-    case "card.addCounter": {
-      const { object } = findObject(state, command.objectId);
-      addCounter(object.counters, command.counterType, command.amount ?? 1);
-      return `Added ${command.amount ?? 1} ${command.counterType} counter${(command.amount ?? 1) === 1 ? "" : "s"} to ${object.name}`;
+    case "zone.shuffle": {
+      const zone = getZone(state, command.zone);
+      shuffle(zone.objects);
+      if (isHiddenZone(command.zone)) clearZoneVisibility(zone);
+      return `Shuffled ${zoneLabel(state, command.zone)}`;
     }
-    case "card.removeCounter": {
-      const { object } = findObject(state, command.objectId);
-      removeCounter(object.counters, command.counterType, command.amount ?? 1);
-      return `Removed ${command.amount ?? 1} ${command.counterType} counter${(command.amount ?? 1) === 1 ? "" : "s"} from ${object.name}`;
+    case "zone.moveMany": {
+      const removed = command.objectIds.map((objectId) => removeObject(state, objectId));
+      const destination = getZone(state, command.to);
+      const moved = removed.map((found) =>
+        resetForZoneChange(found.object, { kind: command.kind, visibility: undefined }),
+      );
+      moved.forEach((object, offset) =>
+        insertObject(destination, object, command.insertIndex, offset),
+      );
+      return `Moved ${moved.length} object${moved.length === 1 ? "" : "s"} to ${zoneLabel(state, command.to)}`;
     }
     case "priority.set": {
       if (command.playerId !== undefined) requirePlayer(state, command.playerId);
@@ -148,149 +202,17 @@ function mutate(
       state.step = command.step ?? state.step;
       return "Updated turn state";
     }
-    case "turn.nextStep": {
-      const currentIndex = state.step ? stepOrder.indexOf(state.step) : -1;
-      const nextIndex = currentIndex + 1;
-      if (nextIndex >= stepOrder.length) {
-        state.step = "untap";
-        state.turnNumber = (state.turnNumber ?? 0) + 1;
-        state.activePlayerId = nextPlayerId(state, state.activePlayerId);
-      } else {
-        state.step = stepOrder[nextIndex];
-      }
-      state.phase = phaseForStep(state.step);
-      return `Advanced to ${state.step}`;
-    }
-    case "stack.add": {
-      if (command.controllerPlayerId !== undefined)
-        requirePlayer(state, command.controllerPlayerId);
-      if (command.ownerPlayerId !== undefined) requirePlayer(state, command.ownerPlayerId);
-      if (command.sourceObjectId !== undefined) findObject(state, command.sourceObjectId);
-      insertStackObject(
-        state,
-        {
-          objectId: createId("obj"),
-          kind: command.kind ?? "spell",
-          controllerPlayerId: command.controllerPlayerId,
-          ownerPlayerId: command.ownerPlayerId,
-          name: command.name,
-          description: command.description,
-          sourceObjectId: command.sourceObjectId,
-          representedCardId: command.representedCardId,
-          annotations: [],
-        },
-        command.position,
-      );
-      return `Added ${command.name} to the stack`;
-    }
-    case "stack.remove": {
-      const index = state.stack.findIndex((item) => item.objectId === command.objectId);
-      if (index < 0) throw new GameCommandError(`stack object not found: ${command.objectId}`);
-      const [removed] = state.stack.splice(index, 1);
-      return `Removed ${removed!.name} from the stack`;
-    }
-    case "stack.reorder": {
-      if (command.objectIds.length !== state.stack.length) {
-        throw new GameCommandError("stack reorder must include every stack object exactly once");
-      }
-
-      const reordered = command.objectIds.map((objectId) => {
-        const stackObject = state.stack.find((item) => item.objectId === objectId);
-        if (!stackObject) throw new GameCommandError(`stack object not found: ${objectId}`);
-        return stackObject;
-      });
-      if (new Set(command.objectIds).size !== command.objectIds.length) {
-        throw new GameCommandError("stack reorder cannot contain duplicate object IDs");
-      }
-
-      state.stack = reordered;
-      return "Reordered the stack";
-    }
-    case "stack.resolveTop": {
-      const resolved = state.stack.pop();
-      if (!resolved) throw new GameCommandError("stack is empty");
-      return `Resolved ${resolved.name}`;
-    }
-    case "token.create": {
-      const owner = requirePlayer(state, command.ownerPlayerId);
-      const controllerPlayerId = command.controllerPlayerId ?? owner.id;
-      requirePlayer(state, controllerPlayerId);
-      const token: GameObject = {
-        objectId: createId("obj"),
-        kind: "token",
-        ownerPlayerId: owner.id,
-        controllerPlayerId,
-        name: command.name,
-        counters: structuredClone(command.counters ?? []),
-        tapped: command.tapped ?? false,
-        faceDown: command.faceDown ?? false,
-        flipped: command.flipped ?? false,
-        phasedOut: false,
-        annotations: [],
-      };
-      insertObject(state, token, command.zone ?? "battlefield", controllerPlayerId);
-      return `Created ${token.name} token`;
-    }
-    case "object.copy": {
-      const source = findAnyObject(state, command.sourceObjectId);
-      const controllerPlayerId =
-        command.controllerPlayerId ?? source.controllerPlayerId ?? source.ownerPlayerId;
-      requirePlayer(state, controllerPlayerId);
-      if (command.destination === "stack") {
-        insertStackObject(
-          state,
-          {
-            objectId: createId("obj"),
-            kind: "copy",
-            name: command.name ?? source.name,
-            description: command.description,
-            controllerPlayerId,
-            ownerPlayerId: controllerPlayerId,
-            sourceObjectId: source.objectId,
-            annotations: [],
-          },
-          command.position,
-        );
-      } else {
-        state.battlefield.push({
-          objectId: createId("obj"),
-          kind: "token",
-          ownerPlayerId: controllerPlayerId,
-          controllerPlayerId,
-          name: command.name ?? source.name,
-          counters: [],
-          tapped: false,
-          faceDown: source.faceDown,
-          flipped: source.flipped,
-          phasedOut: false,
-          annotations: [],
-          copySourceObjectId: source.objectId,
-        });
-      }
-      return `Copied ${source.name} to ${command.destination}`;
-    }
     case "note.add":
       return command.message;
   }
 }
 
-function insertStackObject(
-  state: GameState,
-  stackObject: GameState["stack"][number],
-  position: "top" | "bottom" = "top",
-): void {
-  if (position === "bottom") state.stack.unshift(stackObject);
-  else state.stack.push(stackObject);
-}
-
-type ObjectLocation =
-  | {
-      object: GameObject;
-      zone: "library" | "hand" | "graveyard";
-      player: PlayerState;
-      index: number;
-    }
-  | { object: GameObject; zone: "battlefield" | "exile" | "command"; index: number };
+type ObjectLocation = {
+  object: GameObject;
+  zone: ZoneRef;
+  zoneState: ZoneState;
+  index: number;
+};
 
 function requirePlayer(state: GameState, playerId: string): PlayerState {
   const player = state.players.find((candidate) => candidate.id === playerId);
@@ -298,130 +220,155 @@ function requirePlayer(state: GameState, playerId: string): PlayerState {
   return player;
 }
 
+function getZone(state: GameState, zoneRef: ZoneRef): ZoneState {
+  if (zoneRef.zone === "library" || zoneRef.zone === "hand" || zoneRef.zone === "graveyard") {
+    if (!zoneRef.playerId) throw new GameCommandError(`${zoneRef.zone} requires playerId`);
+    return requirePlayer(state, zoneRef.playerId).zones[zoneRef.zone];
+  }
+
+  if (zoneRef.playerId) throw new GameCommandError(`${zoneRef.zone} is a shared zone`);
+  if (
+    zoneRef.zone === "battlefield" ||
+    zoneRef.zone === "stack" ||
+    zoneRef.zone === "exile" ||
+    zoneRef.zone === "command"
+  ) {
+    return state.zones[zoneRef.zone];
+  }
+
+  throw new GameCommandError(`unsupported zone: ${zoneRef.zone}`);
+}
+
 function findObject(state: GameState, objectId: string): ObjectLocation {
   for (const player of state.players) {
     for (const zone of allPlayerZones()) {
-      const index = player.zones[zone].findIndex((object) => object.objectId === objectId);
-      if (index >= 0) return { object: player.zones[zone][index]!, player, zone, index };
+      const zoneState = player.zones[zone];
+      const index = zoneState.objects.findIndex((object) => object.objectId === objectId);
+      if (index >= 0) {
+        return {
+          object: zoneState.objects[index]!,
+          zone: { zone, playerId: player.id },
+          zoneState,
+          index,
+        };
+      }
     }
   }
 
   for (const zone of allSharedZones()) {
-    const index = state[zone].findIndex((object) => object.objectId === objectId);
-    if (index >= 0) return { object: state[zone][index]!, zone, index };
+    const zoneState = state.zones[zone];
+    const index = zoneState.objects.findIndex((object) => object.objectId === objectId);
+    if (index >= 0) return { object: zoneState.objects[index]!, zone: { zone }, zoneState, index };
   }
 
   throw new GameCommandError(`object not found: ${objectId}`);
 }
 
-function findAnyObject(state: GameState, objectId: string): GameObject {
-  try {
-    return findObject(state, objectId).object;
-  } catch (error) {
-    const stackObject = state.stack.find((object) => object.objectId === objectId);
-    if (stackObject) {
-      return {
-        objectId: stackObject.objectId,
-        kind: "copy",
-        ownerPlayerId:
-          stackObject.ownerPlayerId ??
-          stackObject.controllerPlayerId ??
-          state.players[0]?.id ??
-          "unknown",
-        controllerPlayerId: stackObject.controllerPlayerId,
-        name: stackObject.name,
-        counters: [],
-        tapped: false,
-        faceDown: false,
-        flipped: false,
-        phasedOut: false,
-        annotations: stackObject.annotations,
-      };
-    }
-    throw error;
-  }
-}
-
 function removeObject(state: GameState, objectId: string): ObjectLocation {
   const found = findObject(state, objectId);
-  if ("player" in found) {
-    const [object] = found.player.zones[found.zone].splice(found.index, 1);
-    return { ...found, object: object! };
-  }
-  const [object] = state[found.zone].splice(found.index, 1);
+  const [object] = found.zoneState.objects.splice(found.index, 1);
   return { ...found, object: object! };
 }
 
-function insertObject(
-  state: GameState,
-  object: GameObject,
-  zone: Zone,
-  playerId?: string,
-  position: "top" | "bottom" = "bottom",
-): void {
-  if (zone === "stack") {
-    throw new GameCommandError("use card.move to put represented cards on the stack");
-  }
-
-  if (zone === "battlefield" || zone === "exile" || zone === "command") {
-    insert(state[zone], object, position);
-    return;
-  }
-
-  const destinationPlayerId =
-    zone === "library" || zone === "hand" || zone === "graveyard" ? object.ownerPlayerId : playerId;
-  const player = requirePlayer(state, destinationPlayerId ?? object.ownerPlayerId);
-  insert(player.zones[zone], { ...object, controllerPlayerId: undefined }, position);
+function insertObject(zone: ZoneState, object: GameObject, insertIndex?: number, offset = 0): void {
+  const index = insertIndex === undefined ? zone.objects.length : insertIndex + offset;
+  if (index > zone.objects.length)
+    throw new GameCommandError(`insertIndex out of range: ${insertIndex}`);
+  zone.objects.splice(index, 0, object);
 }
 
-function insert(objects: GameObject[], object: GameObject, position: "top" | "bottom"): void {
-  if (position === "top") objects.unshift(object);
-  else objects.push(object);
+function normalizeCreatedObject(
+  state: GameState,
+  object: Exclude<GameCommand, { type: "state.replace" } & { type: "object.create" }> extends never
+    ? never
+    : Extract<GameCommand, { type: "object.create" }>["object"],
+): GameObject {
+  const created: GameObject = {
+    objectId: createId("obj"),
+    ...object,
+    counters: structuredClone(object.counters ?? []),
+    status: { ...defaultStatus, ...object.status },
+    annotations: structuredClone(object.annotations ?? []),
+  };
+  validateObjectPlayers(state, created);
+  validateVisibility(state, created.visibility);
+  return created;
 }
 
 function resetForZoneChange(
   object: GameObject,
-  options: {
+  overrides: {
+    kind?: GameObject["kind"];
+    ownerPlayerId?: string;
     controllerPlayerId?: string;
-    tapped?: boolean;
-    faceDown?: boolean;
-    flipped?: boolean;
-  } = {},
+    status?: Partial<ObjectStatus>;
+    counters?: GameObject["counters"];
+    visibility?: GameObject["visibility"];
+  },
 ): GameObject {
   return {
     ...object,
     objectId: createId("obj"),
-    controllerPlayerId: options.controllerPlayerId,
-    counters: [],
-    tapped: options.tapped ?? false,
-    faceDown: options.faceDown ?? false,
-    flipped: options.flipped ?? false,
-    phasedOut: false,
+    kind: overrides.kind ?? object.kind,
+    ownerPlayerId: overrides.ownerPlayerId ?? object.ownerPlayerId,
+    controllerPlayerId: overrides.controllerPlayerId ?? object.controllerPlayerId,
+    counters: structuredClone(overrides.counters ?? []),
+    status: { ...defaultStatus, ...overrides.status },
+    visibility: overrides.visibility,
   };
 }
 
-function setObjectFlag(
-  state: GameState,
-  objectId: string,
-  flag: "tapped" | "faceDown" | "flipped",
-  value: boolean,
-): string {
-  const { object } = findObject(state, objectId);
-  object[flag] = value;
-  return `Set ${object.name} ${flag} to ${value}`;
+function applyObjectOverrides(
+  object: GameObject,
+  overrides: {
+    kind?: GameObject["kind"];
+    ownerPlayerId?: string;
+    controllerPlayerId?: string;
+    status?: Partial<ObjectStatus>;
+    counters?: GameObject["counters"];
+    visibility?: GameObject["visibility"];
+  },
+): GameObject {
+  return {
+    ...object,
+    kind: overrides.kind ?? object.kind,
+    ownerPlayerId: overrides.ownerPlayerId ?? object.ownerPlayerId,
+    controllerPlayerId: overrides.controllerPlayerId ?? object.controllerPlayerId,
+    counters: overrides.counters ? structuredClone(overrides.counters) : object.counters,
+    status: overrides.status ? { ...object.status, ...overrides.status } : object.status,
+    visibility: overrides.visibility ?? object.visibility,
+  };
 }
 
-function addCounter(counters: Counter[], type: string, amount: number): void {
-  const counter = counters.find((candidate) => candidate.type === type);
-  if (counter) counter.amount += amount;
-  else counters.push({ type, amount });
+function validateObjectPlayers(state: GameState, object: GameObject): void {
+  if (object.ownerPlayerId !== undefined) requirePlayer(state, object.ownerPlayerId);
+  if (object.controllerPlayerId !== undefined) requirePlayer(state, object.controllerPlayerId);
 }
 
-function removeCounter(counters: Counter[], type: string, amount: number): void {
-  const counter = counters.find((candidate) => candidate.type === type);
-  if (!counter) return;
-  counter.amount -= amount;
-  if (counter.amount <= 0) counters.splice(counters.indexOf(counter), 1);
+function validateVisibility(state: GameState, visibility: GameObject["visibility"]): void {
+  if (!visibility || visibility.revealedTo === "all") return;
+  visibility.revealedTo.forEach((playerId) => requirePlayer(state, playerId));
+}
+
+function sameZone(left: ZoneRef, right: ZoneRef): boolean {
+  return left.zone === right.zone && left.playerId === right.playerId;
+}
+
+function isHiddenZone(zoneRef: ZoneRef): boolean {
+  return zoneRef.zone === "library" || zoneRef.zone === "hand";
+}
+
+function clearZoneVisibility(zone: ZoneState): void {
+  zone.objects.forEach((object) => {
+    object.visibility = undefined;
+  });
+}
+
+function shuffle<T>(items: T[]): void {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex]!, items[index]!];
+  }
 }
 
 function nextPlayerId(state: GameState, from?: string): string | undefined {
@@ -430,36 +377,18 @@ function nextPlayerId(state: GameState, from?: string): string | undefined {
   return state.players[(index + 1) % state.players.length]?.id;
 }
 
-function phaseForStep(step: Step | undefined): GameState["phase"] {
-  if (!step) return undefined;
-  if (["untap", "upkeep", "draw"].includes(step)) return "beginning";
-  if (
-    [
-      "beginningOfCombat",
-      "declareAttackers",
-      "declareBlockers",
-      "combatDamage",
-      "endOfCombat",
-    ].includes(step)
-  )
-    return "combat";
-  if (["end", "cleanup"].includes(step)) return "ending";
-  return undefined;
-}
-
 function actorFor(command: Exclude<GameCommand, { type: "state.replace" }>): string | undefined {
   if ("actorPlayerId" in command) return command.actorPlayerId;
   if ("playerId" in command) return command.playerId;
   if ("controllerPlayerId" in command) return command.controllerPlayerId;
   if ("ownerPlayerId" in command) return command.ownerPlayerId;
+  if ("object" in command) return command.object.controllerPlayerId ?? command.object.ownerPlayerId;
   return undefined;
 }
 
-function zoneLabel(state: GameState, zone: Zone, playerId?: string): string {
-  if (zone === "battlefield" || zone === "exile" || zone === "command" || zone === "stack")
-    return zone;
-  const player = playerId ? requirePlayer(state, playerId) : undefined;
-  return player ? `${player.name}'s ${zone}` : zone;
+function zoneLabel(state: GameState, zoneRef: ZoneRef): string {
+  if (zoneRef.playerId) return `${requirePlayer(state, zoneRef.playerId).name}'s ${zoneRef.zone}`;
+  return zoneRef.zone;
 }
 
 function formatDelta(delta: number): string {

@@ -2,7 +2,7 @@ import type { GameState, GameObject, NewGameRequest, PlayerState, Zone } from "@
 import { createId } from "./ids.js";
 
 const playerZones = ["library", "hand", "graveyard"] as const;
-const sharedZones = ["battlefield", "exile", "command"] as const;
+const sharedZones = ["battlefield", "stack", "exile", "command"] as const;
 
 export function createGame(request: NewGameRequest): GameState {
   const players = request.players.map((player, index): PlayerState => {
@@ -14,9 +14,9 @@ export function createGame(request: NewGameRequest): GameState {
       life: player.life ?? 40,
       counters: [],
       zones: {
-        library: createCards(player.library ?? [], playerId, playerId),
-        hand: createCards(player.hand ?? [], playerId, playerId),
-        graveyard: createCards(player.graveyard ?? [], playerId, playerId),
+        library: { objects: createCards(player.library ?? [], playerId, playerId) },
+        hand: { objects: createCards(player.hand ?? [], playerId, playerId) },
+        graveyard: { objects: createCards(player.graveyard ?? [], playerId, playerId) },
       },
     };
   });
@@ -40,10 +40,12 @@ export function createGame(request: NewGameRequest): GameState {
     turnNumber: request.turnNumber ?? 1,
     phase: request.phase,
     step: request.step,
-    battlefield,
-    exile,
-    command,
-    stack: [],
+    zones: {
+      battlefield: { objects: battlefield },
+      stack: { objects: [] },
+      exile: { objects: exile },
+      command: { objects: command },
+    },
     eventLog: [],
   };
 }
@@ -77,10 +79,12 @@ function createCards(
     controllerPlayerId,
     name,
     counters: [],
-    tapped: false,
-    faceDown: false,
-    flipped: false,
-    phasedOut: false,
+    status: {
+      tapped: false,
+      faceDown: false,
+      flipped: false,
+      phasedOut: false,
+    },
     annotations: [],
   }));
 }

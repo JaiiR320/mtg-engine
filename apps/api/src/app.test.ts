@@ -23,10 +23,10 @@ describe("api", () => {
     expect(created.status).toBe(200);
     const body = await created.json();
     expect(body.view.viewMode).toBe("debug");
-    expect(body.view.players[0].zones.library[0].name).toBe("Opt");
-    expect(body.view.players[0].zones.library[0].objectId).toBeDefined();
-    expect(body.view.players[0].zones.library[0].cardId).toBeDefined();
-    expect(body.view.battlefield).toEqual([]);
+    expect(body.view.players[0].zones.library.objects[0].name).toBe("Opt");
+    expect(body.view.players[0].zones.library.objects[0].objectId).toBeDefined();
+    expect(body.view.players[0].zones.library.objects[0].cardId).toBeDefined();
+    expect(body.view.zones.battlefield.objects).toEqual([]);
   });
 
   it("validates and applies commands", async () => {
@@ -38,17 +38,24 @@ describe("api", () => {
       headers: { "content-type": "application/json" },
     });
 
+    const game = await (await app.request("/game")).json();
+    const objectId = game.players[0].zones.library.objects[0].objectId;
+
     const response = await app.request("/game/commands", {
       method: "POST",
-      body: JSON.stringify({ type: "card.draw", playerId: "p1" }),
+      body: JSON.stringify({
+        type: "object.move",
+        objectId,
+        to: { zone: "hand", playerId: "p1" },
+      }),
       headers: { "content-type": "application/json" },
     });
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.view.players[0].zones.hand[0].name).toBe("Opt");
-    expect(body.view.players[0].zones.hand[0].objectId).toBeDefined();
-    expect(body.event.type).toBe("card.draw");
+    expect(body.view.players[0].zones.hand.objects[0].name).toBe("Opt");
+    expect(body.view.players[0].zones.hand.objects[0].objectId).toBeDefined();
+    expect(body.event.type).toBe("object.move");
   });
 
   it("returns 400 for malformed commands", async () => {
