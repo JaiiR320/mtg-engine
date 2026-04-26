@@ -165,6 +165,36 @@ describe("virtual table engine", () => {
     expect(game.stack).toHaveLength(0);
   });
 
+  it("keeps stack ordered bottom-to-top and resolves the top object", () => {
+    let game = createGame({ players: [{ id: "p1", name: "Jair" }] });
+
+    game = applyCommand(game, {
+      type: "stack.add",
+      controllerPlayerId: "p1",
+      name: "Bottom",
+    }).state;
+    game = applyCommand(game, { type: "stack.add", controllerPlayerId: "p1", name: "Top" }).state;
+    game = applyCommand(game, {
+      type: "stack.add",
+      controllerPlayerId: "p1",
+      name: "New Bottom",
+      position: "bottom",
+    }).state;
+
+    expect(game.stack.map((item) => item.name)).toEqual(["New Bottom", "Bottom", "Top"]);
+
+    const reorderedIds = [
+      game.stack[1]!.objectId,
+      game.stack[2]!.objectId,
+      game.stack[0]!.objectId,
+    ];
+    game = applyCommand(game, { type: "stack.reorder", objectIds: reorderedIds }).state;
+    expect(game.stack.map((item) => item.name)).toEqual(["Bottom", "Top", "New Bottom"]);
+
+    game = applyCommand(game, { type: "stack.resolveTop" }).state;
+    expect(game.stack.map((item) => item.name)).toEqual(["Bottom", "Top"]);
+  });
+
   it("moves represented cards onto the shared stack zone", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", hand: ["Lightning Bolt"] }] });
     const handObject = game.players[0]!.zones.hand[0]!;

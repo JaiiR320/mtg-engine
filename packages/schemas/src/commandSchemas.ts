@@ -95,8 +95,10 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
     description: z.string().optional(),
     sourceObjectId: objectIdSchema.optional(),
     representedCardId: z.string().min(1).optional(),
+    position: zonePositionSchema.optional(),
   }),
   z.object({ type: z.literal("stack.remove"), objectId: objectIdSchema }),
+  z.object({ type: z.literal("stack.reorder"), objectIds: z.array(objectIdSchema).min(1) }),
   z.object({ type: z.literal("stack.resolveTop") }),
   z.object({
     type: z.literal("token.create"),
@@ -116,6 +118,7 @@ export const gameCommandSchema = z.discriminatedUnion("type", [
     destination: z.enum(["battlefield", "stack"]),
     name: z.string().min(1).optional(),
     description: z.string().optional(),
+    position: zonePositionSchema.optional(),
   }),
   z.object({
     type: z.literal("note.add"),

@@ -78,16 +78,20 @@ function mutate(
     case "card.move": {
       const found = removeObject(state, command.objectId);
       if (command.toZone === "stack") {
-        state.stack.push({
-          objectId: createId("obj"),
-          kind: "spell",
-          controllerPlayerId:
-            command.toPlayerId ?? found.object.controllerPlayerId ?? found.object.ownerPlayerId,
-          ownerPlayerId: found.object.ownerPlayerId,
-          name: found.object.name,
-          representedCardId: found.object.cardId,
-          annotations: [],
-        });
+        insertStackObject(
+          state,
+          {
+            objectId: createId("obj"),
+            kind: "spell",
+            controllerPlayerId:
+              command.toPlayerId ?? found.object.controllerPlayerId ?? found.object.ownerPlayerId,
+            ownerPlayerId: found.object.ownerPlayerId,
+            name: found.object.name,
+            representedCardId: found.object.cardId,
+            annotations: [],
+          },
+          command.position,
+        );
         return `Moved ${found.object.name} to the stack`;
       }
 
@@ -162,17 +166,21 @@ function mutate(
         requirePlayer(state, command.controllerPlayerId);
       if (command.ownerPlayerId !== undefined) requirePlayer(state, command.ownerPlayerId);
       if (command.sourceObjectId !== undefined) findObject(state, command.sourceObjectId);
-      state.stack.push({
-        objectId: createId("obj"),
-        kind: command.kind ?? "spell",
-        controllerPlayerId: command.controllerPlayerId,
-        ownerPlayerId: command.ownerPlayerId,
-        name: command.name,
-        description: command.description,
-        sourceObjectId: command.sourceObjectId,
-        representedCardId: command.representedCardId,
-        annotations: [],
-      });
+      insertStackObject(
+        state,
+        {
+          objectId: createId("obj"),
+          kind: command.kind ?? "spell",
+          controllerPlayerId: command.controllerPlayerId,
+          ownerPlayerId: command.ownerPlayerId,
+          name: command.name,
+          description: command.description,
+          sourceObjectId: command.sourceObjectId,
+          representedCardId: command.representedCardId,
+          annotations: [],
+        },
+        command.position,
+      );
       return `Added ${command.name} to the stack`;
     }
     case "stack.remove": {
@@ -180,6 +188,23 @@ function mutate(
       if (index < 0) throw new GameCommandError(`stack object not found: ${command.objectId}`);
       const [removed] = state.stack.splice(index, 1);
       return `Removed ${removed!.name} from the stack`;
+    }
+    case "stack.reorder": {
+      if (command.objectIds.length !== state.stack.length) {
+        throw new GameCommandError("stack reorder must include every stack object exactly once");
+      }
+
+      const reordered = command.objectIds.map((objectId) => {
+        const stackObject = state.stack.find((item) => item.objectId === objectId);
+        if (!stackObject) throw new GameCommandError(`stack object not found: ${objectId}`);
+        return stackObject;
+      });
+      if (new Set(command.objectIds).size !== command.objectIds.length) {
+        throw new GameCommandError("stack reorder cannot contain duplicate object IDs");
+      }
+
+      state.stack = reordered;
+      return "Reordered the stack";
     }
     case "stack.resolveTop": {
       const resolved = state.stack.pop();
@@ -212,16 +237,20 @@ function mutate(
         command.controllerPlayerId ?? source.controllerPlayerId ?? source.ownerPlayerId;
       requirePlayer(state, controllerPlayerId);
       if (command.destination === "stack") {
-        state.stack.push({
-          objectId: createId("obj"),
-          kind: "copy",
-          name: command.name ?? source.name,
-          description: command.description,
-          controllerPlayerId,
-          ownerPlayerId: controllerPlayerId,
-          sourceObjectId: source.objectId,
-          annotations: [],
-        });
+        insertStackObject(
+          state,
+          {
+            objectId: createId("obj"),
+            kind: "copy",
+            name: command.name ?? source.name,
+            description: command.description,
+            controllerPlayerId,
+            ownerPlayerId: controllerPlayerId,
+            sourceObjectId: source.objectId,
+            annotations: [],
+          },
+          command.position,
+        );
       } else {
         state.battlefield.push({
           objectId: createId("obj"),
@@ -243,6 +272,15 @@ function mutate(
     case "note.add":
       return command.message;
   }
+}
+
+function insertStackObject(
+  state: GameState,
+  stackObject: GameState["stack"][number],
+  position: "top" | "bottom" = "top",
+): void {
+  if (position === "bottom") state.stack.unshift(stackObject);
+  else state.stack.push(stackObject);
 }
 
 type ObjectLocation =
