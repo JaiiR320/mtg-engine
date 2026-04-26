@@ -21,6 +21,18 @@ export function createGame(request: NewGameRequest): GameState {
     };
   });
 
+  const playerIds = new Set<string>();
+  for (const player of players) {
+    if (playerIds.has(player.id)) throw new Error(`duplicate player id: ${player.id}`);
+    playerIds.add(player.id);
+  }
+  if (request.activePlayerId !== undefined && !playerIds.has(request.activePlayerId)) {
+    throw new Error(`active player not found: ${request.activePlayerId}`);
+  }
+  if (request.priorityPlayerId !== undefined && !playerIds.has(request.priorityPlayerId)) {
+    throw new Error(`priority player not found: ${request.priorityPlayerId}`);
+  }
+
   const battlefield = request.players.flatMap((player, index) =>
     createCards(player.battlefield ?? [], players[index]!.id, players[index]!.id),
   );

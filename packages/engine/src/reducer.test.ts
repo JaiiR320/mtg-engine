@@ -21,6 +21,23 @@ describe("virtual table engine", () => {
     expect(toGameView(game).viewMode).toBe("debug");
   });
 
+  it("rejects incoherent initial player IDs", () => {
+    expect(() =>
+      createGame({
+        players: [
+          { id: "p1", name: "Jair" },
+          { id: "p1", name: "Skyler" },
+        ],
+      }),
+    ).toThrow("duplicate player id");
+    expect(() =>
+      createGame({ players: [{ id: "p1", name: "Jair" }], activePlayerId: "missing" }),
+    ).toThrow("active player not found");
+    expect(() =>
+      createGame({ players: [{ id: "p1", name: "Jair" }], priorityPlayerId: "missing" }),
+    ).toThrow("priority player not found");
+  });
+
   it("moves cards from library to hand and records an event", () => {
     let game = createGame({ players: [{ id: "p1", name: "Jair", library: ["Opt", "Island"] }] });
     const objectIds = game.players[0]!.zones.library.objects.map((object) => object.objectId);
