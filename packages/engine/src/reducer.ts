@@ -25,6 +25,8 @@ export type ApplyCommandResult = {
   event: GameEvent;
 };
 
+type ObjectCreateInput = Extract<GameCommand, { type: "object.create" }>["object"];
+
 const defaultStatus: ObjectStatus = {
   tapped: false,
   faceDown: false,
@@ -72,7 +74,7 @@ function mutate(
     }
     case "object.create": {
       const zone = getZone(state, command.to);
-      const object = normalizeCreatedObject(state, command.object);
+      const object = buildGameObject(state, command.object);
       insertObject(zone, object, command.insertIndex);
       return `Created ${object.name} in ${zoneLabel(state, command.to)}`;
     }
@@ -280,12 +282,7 @@ function insertObject(zone: ZoneState, object: GameObject, insertIndex?: number,
   zone.objects.splice(index, 0, object);
 }
 
-function normalizeCreatedObject(
-  state: GameState,
-  object: Exclude<GameCommand, { type: "state.replace" } & { type: "object.create" }> extends never
-    ? never
-    : Extract<GameCommand, { type: "object.create" }>["object"],
-): GameObject {
+function buildGameObject(state: GameState, object: ObjectCreateInput): GameObject {
   const created: GameObject = {
     objectId: createId("obj"),
     ...object,
