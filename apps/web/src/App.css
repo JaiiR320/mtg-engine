@@ -1,0 +1,301 @@
+:root {
+  color: #222;
+  background: #f6f6f6;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+code,
+pre,
+textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  min-height: 100vh;
+}
+
+.table-pane,
+.console-pane {
+  padding: 16px;
+}
+
+.table-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  overflow: auto;
+}
+
+.console-pane {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  overflow: auto;
+  border-left: 1px solid #ccc;
+  background: #fff;
+}
+
+.hero-card,
+.player-card,
+.zone-card,
+.message-box,
+.latest-event,
+.event-log,
+.command-reference {
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 12px;
+}
+
+.hero-card {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.eyebrow {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+}
+
+h3,
+h4 {
+  font-size: 1rem;
+}
+
+.state-grid,
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.state-grid div {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.state-grid dt,
+.key-value span {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.state-grid dd,
+code {
+  overflow-wrap: anywhere;
+}
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-card > header,
+.zone-card > header,
+.console-header,
+.object-title,
+.button-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.life-total {
+  border: 1px solid #ccc;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.zone-grid {
+  margin-top: 10px;
+}
+
+.zone-card > header {
+  margin: -12px -12px 10px;
+  border-bottom: 1px solid #ccc;
+  background: #f2f2f2;
+  padding: 8px 12px;
+}
+
+.empty-text {
+  color: #777;
+  font-size: 0.9rem;
+}
+
+.object-list,
+.event-log ol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.object-list {
+  list-style: none;
+}
+
+.object-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.object-title span,
+.counter-list span {
+  border: 1px solid #ddd;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+
+.key-value {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.counter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.command-input {
+  min-height: 260px;
+  resize: vertical;
+  border: 1px solid #ccc;
+  padding: 8px;
+}
+
+.primary-button,
+.ghost-button {
+  border: 1px solid #aaa;
+  background: #f6f6f6;
+  padding: 8px 10px;
+}
+
+.primary-button {
+  background: #eaeaea;
+  font-weight: 700;
+}
+
+.command-reference summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reference-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.reference-row p {
+  color: #666;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.error-box {
+  overflow: visible;
+  border-color: #c33;
+  color: #c33;
+  line-height: 1.4;
+  min-height: 44px;
+  white-space: pre-wrap;
+}
+
+.event-card,
+.event-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-log ol {
+  max-height: 300px;
+  overflow: auto;
+  padding-left: 20px;
+}
+
+.event-log li {
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.event-revision {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .hero-card {
+    grid-template-columns: 1fr;
+  }
+
+  .console-pane {
+    position: static;
+    height: auto;
+    border-top: 1px solid #ccc;
+    border-left: 0;
+  }
+}
