@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
+  preview: {
+    allowedHosts: ["mtg-engineweb-production.up.railway.app"],
+  },
   resolve: {
     alias: {
       "@mtg-engine/core": fileURLToPath(
