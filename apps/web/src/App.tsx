@@ -1,14 +1,16 @@
-import { useState } from "react";
-import { applyCommand, createGame, GameCommandError, toGameView } from "@mtg-engine/core";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   gameCommandSchema,
   type Counter,
   type GameEvent,
   type GameObject,
-  type GameState,
+  type GameView,
   type PlayerState,
   type ZoneState,
 } from "@mtg-engine/schemas";
+import { applyGameCommand, createGame, getGame, type GameResponse } from "./api.js";
+import { getDevIdentity, type DevIdentity } from "./devIdentity.js";
 
 const defaultCommandText = JSON.stringify(
   {
@@ -21,155 +23,108 @@ const defaultCommandText = JSON.stringify(
 
 const playerZones = ["library", "hand", "graveyard"] as const;
 const sharedZones = ["battlefield", "stack", "exile", "command"] as const;
-const playerNames = ["Austin", "Brendan", "Brian", "Eric", "Jair", "Zach"] as const;
 
-const commandReference = [
-  {
-    type: "player.adjustLife",
-    params: "playerId, delta",
-    template: { type: "player.adjustLife", playerId: "Jair", delta: -1 },
-  },
-  {
-    type: "player.setLife",
-    params: "playerId, life",
-    template: { type: "player.setLife", playerId: "Jair", life: 40 },
-  },
-  {
-    type: "player.setCounters",
-    params: "playerId, counters[]",
-    template: {
-      type: "player.setCounters",
-      playerId: "Jair",
-      counters: [{ type: "poison", amount: 1 }],
-    },
-  },
-  {
-    type: "object.create",
-    params: "object, to, insertIndex?",
-    template: {
-      type: "object.create",
-      object: { kind: "token", ownerPlayerId: "Jair", controllerPlayerId: "Jair", name: "Food" },
-      to: { zone: "battlefield" },
-    },
-  },
-  {
-    type: "object.move",
-    params:
-      "objectId, to, insertIndex?, kind?, ownerPlayerId?, controllerPlayerId?, status?, counters?, visibility?",
-    template: { type: "object.move", objectId: "obj_...", to: { zone: "hand", playerId: "Jair" } },
-  },
-  {
-    type: "object.delete",
-    params: "objectId",
-    template: { type: "object.delete", objectId: "obj_..." },
-  },
-  {
-    type: "object.copy",
-    params:
-      "sourceObjectId, to, insertIndex?, kind?, name?, description?, ownerPlayerId?, controllerPlayerId?",
-    template: { type: "object.copy", sourceObjectId: "obj_...", to: { zone: "battlefield" } },
-  },
-  {
-    type: "object.setStatus",
-    params: "objectId, status",
-    template: { type: "object.setStatus", objectId: "obj_...", status: { tapped: true } },
-  },
-  {
-    type: "object.setCounters",
-    params: "objectId, counters[]",
-    template: {
-      type: "object.setCounters",
-      objectId: "obj_...",
-      counters: [{ type: "+1/+1", amount: 1 }],
-    },
-  },
-  {
-    type: "object.setController",
-    params: "objectId, controllerPlayerId|null",
-    template: { type: "object.setController", objectId: "obj_...", controllerPlayerId: "Jair" },
-  },
-  {
-    type: "object.setOwner",
-    params: "objectId, ownerPlayerId|null",
-    template: { type: "object.setOwner", objectId: "obj_...", ownerPlayerId: "Jair" },
-  },
-  {
-    type: "object.setVisibility",
-    params: "objectId, visibility|null",
-    template: {
-      type: "object.setVisibility",
-      objectId: "obj_...",
-      visibility: { revealedTo: "all" },
-    },
-  },
-  {
-    type: "object.setAnnotations",
-    params: "objectId, annotations[]",
-    template: { type: "object.setAnnotations", objectId: "obj_...", annotations: ["debug note"] },
-  },
-  {
-    type: "zone.reorder",
-    params: "zone, objectIds[]",
-    template: {
-      type: "zone.reorder",
-      zone: { zone: "hand", playerId: "Jair" },
-      objectIds: ["obj_..."],
-    },
-  },
-  {
-    type: "zone.shuffle",
-    params: "zone",
-    template: { type: "zone.shuffle", zone: { zone: "library", playerId: "Jair" } },
-  },
-  {
-    type: "zone.moveMany",
-    params: "objectIds[], to, insertIndex?, kind?",
-    template: {
-      type: "zone.moveMany",
-      objectIds: ["obj_..."],
-      to: { zone: "graveyard", playerId: "Jair" },
-    },
-  },
-  {
-    type: "priority.set",
-    params: "playerId?",
-    template: { type: "priority.set", playerId: "Jair" },
-  },
-  {
-    type: "priority.pass",
-    params: "playerId?",
-    template: { type: "priority.pass", playerId: "Jair" },
-  },
-  {
-    type: "turn.set",
-    params: "activePlayerId?, turnNumber?, phase?, step?",
-    template: { type: "turn.set", activePlayerId: "Jair", turnNumber: 1, phase: "precombatMain" },
-  },
-  {
-    type: "note.add",
-    params: "actorPlayerId?, message",
-    template: { type: "note.add", actorPlayerId: "Jair", message: "debug note" },
-  },
-  {
-    type: "state.replace",
-    params: "state",
-    template: { type: "state.replace", state: "paste full GameState here" },
-  },
-];
-
-function createDebugGame() {
-  return createGame({ players: playerNames.slice(0, 2).map((name) => ({ id: name, name })) });
+export function App({ children }: { children: ReactNode }) {
+  return children;
 }
 
-export function App() {
-  const [game, setGame] = useState<GameState>(() => createDebugGame());
+export function HomePage() {
+  const navigate = useNavigate();
+  const [name, setName] = useState("New Game");
+  const [error, setError] = useState<string>();
+  const [creating, setCreating] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(undefined);
+    setCreating(true);
+    try {
+      const response = await createGame(name);
+      await navigate({ to: "/games/$gameId", params: { gameId: response.game.id } });
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Could not create game");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <main className="home-shell">
+      <form className="hero-card create-game-form" onSubmit={submit}>
+        <div>
+          <p className="eyebrow">MTG Engine</p>
+          <h1>Create Game</h1>
+        </div>
+        <label>
+          Game name
+          <input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <button className="primary-button" type="submit" disabled={creating || name.trim() === ""}>
+          {creating ? "Creating..." : "Create Game"}
+        </button>
+        {error ? <pre className="message-box error-box">{error}</pre> : null}
+      </form>
+    </main>
+  );
+}
+
+export function GamePage() {
+  const { gameId } = useParams({ from: "/games/$gameId" });
+  const [identity] = useState<DevIdentity>(() => getDevIdentity());
+  const [response, setResponse] = useState<GameResponse>();
   const [commandText, setCommandText] = useState(defaultCommandText);
   const [error, setError] = useState<string>();
   const [latestEvent, setLatestEvent] = useState<GameEvent>();
+  const [loading, setLoading] = useState(true);
 
-  const view = toGameView(game);
+  useEffect(() => {
+    let cancelled = false;
 
-  function applyJsonCommand() {
+    async function load() {
+      setLoading(true);
+      setError(undefined);
+      try {
+        const loaded = await getGame(gameId);
+        if (cancelled) return;
+        const currentPlayer = loaded.view.players.find((player) => player.id === identity.id);
+        if (currentPlayer) {
+          setResponse(loaded);
+          return;
+        }
+
+        const joined = await applyGameCommand(gameId, {
+          type: "player.add",
+          player: identity,
+        });
+        if (!cancelled) {
+          setResponse(joined);
+          setLatestEvent(joined.event);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : "Could not load game");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, identity]);
+
+  async function refreshGame() {
+    setError(undefined);
+    try {
+      setResponse(await getGame(gameId));
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Could not refresh game");
+    }
+  }
+
+  async function applyJsonCommand() {
     setError(undefined);
 
     let parsed: unknown;
@@ -187,15 +142,11 @@ export function App() {
     }
 
     try {
-      const result = applyCommand(game, validated.data);
-      setGame(result.state);
+      const result = await applyGameCommand(gameId, validated.data);
+      setResponse(result);
       setLatestEvent(result.event);
     } catch (commandError) {
-      if (commandError instanceof GameCommandError || commandError instanceof Error) {
-        setError(commandError.message);
-        return;
-      }
-      setError("Unexpected command error");
+      setError(commandError instanceof Error ? commandError.message : "Unexpected command error");
     }
   }
 
@@ -208,45 +159,34 @@ export function App() {
     }
   }
 
-  function resetGame() {
-    setGame(createDebugGame());
-    setError(undefined);
-    setLatestEvent(undefined);
+  if (loading) {
+    return (
+      <main className="app-shell single-pane">
+        <section className="table-pane">Loading game...</section>
+      </main>
+    );
   }
+
+  if (!response) {
+    return (
+      <main className="app-shell single-pane">
+        <section className="table-pane">
+          <div className="hero-card">
+            <h1>Game unavailable</h1>
+            {error ? <pre className="message-box error-box">{error}</pre> : null}
+            <Link to="/">Create a game</Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const commandReference = buildCommandReference(identity.id);
 
   return (
     <main className="app-shell">
       <section className="table-pane" aria-label="Game state">
-        <header className="hero-card">
-          <div>
-            <p className="eyebrow">MTG Engine</p>
-            <h1>Core State Console</h1>
-          </div>
-          <dl className="state-grid">
-            <Stat label="Revision" value={view.revision} />
-            <Stat label="Turn" value={view.turnNumber ?? "-"} />
-            <Stat label="Phase" value={view.phase ?? "-"} />
-            <Stat label="Step" value={view.step ?? "-"} />
-            <Stat label="Active" value={view.activePlayerId ?? "-"} />
-            <Stat label="Priority" value={view.priorityPlayerId ?? "-"} />
-          </dl>
-        </header>
-
-        <section className="section-stack">
-          <h2>Players</h2>
-          {view.players.map((player) => (
-            <PlayerPanel key={player.id} player={player} />
-          ))}
-        </section>
-
-        <section className="section-stack">
-          <h2>Shared Zones</h2>
-          <div className="zone-grid">
-            {sharedZones.map((zoneName) => (
-              <ZonePanel key={zoneName} label={zoneName} zone={view.zones[zoneName]} />
-            ))}
-          </div>
-        </section>
+        <GameStateView response={response} identity={identity} />
       </section>
 
       <aside className="console-pane" aria-label="Command console">
@@ -255,11 +195,12 @@ export function App() {
             <p className="eyebrow">Console</p>
             <h2>Raw Command JSON</h2>
           </div>
-          <button className="ghost-button" type="button" onClick={resetGame}>
-            Reset Game
+          <button className="ghost-button" type="button" onClick={() => void refreshGame()}>
+            Refresh
           </button>
         </div>
 
+        <p className="empty-text">Strict JSON only: use 2, not +2.</p>
         <textarea
           className="command-input"
           spellCheck={false}
@@ -268,7 +209,7 @@ export function App() {
         />
 
         <div className="button-row">
-          <button className="primary-button" type="button" onClick={applyJsonCommand}>
+          <button className="primary-button" type="button" onClick={() => void applyJsonCommand()}>
             Apply Command
           </button>
           <button className="ghost-button" type="button" onClick={formatJson}>
@@ -276,19 +217,19 @@ export function App() {
           </button>
         </div>
 
-        <CommandReference onUseTemplate={setCommandText} />
-
         {error ? <pre className="message-box error-box">{error}</pre> : null}
+
+        <CommandReference commands={commandReference} onUseTemplate={setCommandText} />
 
         <EventPanel title="Latest Event" event={latestEvent} />
 
         <section className="event-log">
           <h3>Event Log</h3>
-          {view.eventLog.length === 0 ? (
+          {response.view.eventLog.length === 0 ? (
             <p className="empty-text">No events yet.</p>
           ) : (
             <ol>
-              {[...view.eventLog].reverse().map((event) => (
+              {[...response.view.eventLog].reverse().map((event) => (
                 <li key={event.id}>
                   <span className="event-revision">#{event.revision}</span>
                   <span>{event.message}</span>
@@ -303,12 +244,201 @@ export function App() {
   );
 }
 
-function CommandReference({ onUseTemplate }: { onUseTemplate: (template: string) => void }) {
+function GameStateView({ response, identity }: { response: GameResponse; identity: DevIdentity }) {
+  const view = response.view;
+  return (
+    <>
+      <header className="hero-card">
+        <div>
+          <p className="eyebrow">{response.game.name}</p>
+          <h1>Core State Console</h1>
+          <p className="empty-text">You are {identity.name}</p>
+        </div>
+        <dl className="state-grid">
+          <Stat label="Game ID" value={response.game.id} />
+          <Stat label="Revision" value={view.revision} />
+          <Stat label="Turn" value={view.turnNumber ?? "-"} />
+          <Stat label="Phase" value={view.phase ?? "-"} />
+          <Stat label="Step" value={view.step ?? "-"} />
+          <Stat label="Active" value={view.activePlayerId ?? "-"} />
+          <Stat label="Priority" value={view.priorityPlayerId ?? "-"} />
+        </dl>
+      </header>
+
+      <section className="section-stack">
+        <h2>Players</h2>
+        {view.players.length === 0 ? (
+          <p className="empty-text">No players yet.</p>
+        ) : (
+          view.players.map((player) => <PlayerPanel key={player.id} player={player} />)
+        )}
+      </section>
+
+      <section className="section-stack">
+        <h2>Shared Zones</h2>
+        <div className="zone-grid">
+          {sharedZones.map((zoneName) => (
+            <ZonePanel key={zoneName} label={zoneName} zone={view.zones[zoneName]} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+type CommandReferenceItem = {
+  type: string;
+  params: string;
+  template: unknown;
+};
+
+function buildCommandReference(playerId: string): CommandReferenceItem[] {
+  return [
+    {
+      type: "player.add",
+      params: "player.id, player.name",
+      template: { type: "player.add", player: { id: "player_...", name: "Player Name" } },
+    },
+    {
+      type: "player.adjustLife",
+      params: "playerId, delta",
+      template: { type: "player.adjustLife", playerId, delta: -1 },
+    },
+    {
+      type: "player.setLife",
+      params: "playerId, life",
+      template: { type: "player.setLife", playerId, life: 40 },
+    },
+    {
+      type: "player.setCounters",
+      params: "playerId, counters[]",
+      template: { type: "player.setCounters", playerId, counters: [{ type: "poison", amount: 1 }] },
+    },
+    {
+      type: "object.create",
+      params: "object, to, insertIndex?",
+      template: {
+        type: "object.create",
+        object: {
+          kind: "token",
+          ownerPlayerId: playerId,
+          controllerPlayerId: playerId,
+          name: "Food",
+        },
+        to: { zone: "battlefield" },
+      },
+    },
+    {
+      type: "object.move",
+      params:
+        "objectId, to, insertIndex?, kind?, ownerPlayerId?, controllerPlayerId?, status?, counters?, visibility?",
+      template: { type: "object.move", objectId: "obj_...", to: { zone: "hand", playerId } },
+    },
+    {
+      type: "object.delete",
+      params: "objectId",
+      template: { type: "object.delete", objectId: "obj_..." },
+    },
+    {
+      type: "object.copy",
+      params:
+        "sourceObjectId, to, insertIndex?, kind?, name?, description?, ownerPlayerId?, controllerPlayerId?",
+      template: { type: "object.copy", sourceObjectId: "obj_...", to: { zone: "battlefield" } },
+    },
+    {
+      type: "object.setStatus",
+      params: "objectId, status",
+      template: { type: "object.setStatus", objectId: "obj_...", status: { tapped: true } },
+    },
+    {
+      type: "object.setCounters",
+      params: "objectId, counters[]",
+      template: {
+        type: "object.setCounters",
+        objectId: "obj_...",
+        counters: [{ type: "+1/+1", amount: 1 }],
+      },
+    },
+    {
+      type: "object.setController",
+      params: "objectId, controllerPlayerId|null",
+      template: { type: "object.setController", objectId: "obj_...", controllerPlayerId: playerId },
+    },
+    {
+      type: "object.setOwner",
+      params: "objectId, ownerPlayerId|null",
+      template: { type: "object.setOwner", objectId: "obj_...", ownerPlayerId: playerId },
+    },
+    {
+      type: "object.setVisibility",
+      params: "objectId, visibility|null",
+      template: {
+        type: "object.setVisibility",
+        objectId: "obj_...",
+        visibility: { revealedTo: "all" },
+      },
+    },
+    {
+      type: "object.setAnnotations",
+      params: "objectId, annotations[]",
+      template: { type: "object.setAnnotations", objectId: "obj_...", annotations: ["debug note"] },
+    },
+    {
+      type: "zone.reorder",
+      params: "zone, objectIds[]",
+      template: { type: "zone.reorder", zone: { zone: "hand", playerId }, objectIds: ["obj_..."] },
+    },
+    {
+      type: "zone.shuffle",
+      params: "zone",
+      template: { type: "zone.shuffle", zone: { zone: "library", playerId } },
+    },
+    {
+      type: "zone.moveMany",
+      params: "objectIds[], to, insertIndex?, kind?",
+      template: {
+        type: "zone.moveMany",
+        objectIds: ["obj_..."],
+        to: { zone: "graveyard", playerId },
+      },
+    },
+    { type: "priority.set", params: "playerId?", template: { type: "priority.set", playerId } },
+    { type: "priority.pass", params: "playerId?", template: { type: "priority.pass", playerId } },
+    {
+      type: "turn.set",
+      params: "activePlayerId?, turnNumber?, phase?, step?",
+      template: {
+        type: "turn.set",
+        activePlayerId: playerId,
+        turnNumber: 1,
+        phase: "precombatMain",
+      },
+    },
+    {
+      type: "note.add",
+      params: "actorPlayerId?, message",
+      template: { type: "note.add", actorPlayerId: playerId, message: "debug note" },
+    },
+    {
+      type: "state.replace",
+      params: "state",
+      template: { type: "state.replace", state: "paste full GameState here" },
+    },
+  ];
+}
+
+function CommandReference({
+  commands,
+  onUseTemplate,
+}: {
+  commands: CommandReferenceItem[];
+  onUseTemplate: (template: string) => void;
+}) {
   return (
     <details className="command-reference" open>
       <summary>Command Reference</summary>
       <div className="reference-list">
-        {commandReference.map((command) => (
+        {commands.map((command) => (
           <div className="reference-row" key={command.type}>
             <div>
               <code>{command.type}</code>
