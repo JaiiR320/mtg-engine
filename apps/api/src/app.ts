@@ -1,29 +1,37 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { GameCommandError } from "@mtg-engine/core";
-import { gameCommandSchema, newGameRequestSchema } from "@mtg-engine/schemas";
+import { gameCommandSchema } from "@mtg-engine/schemas";
 import { EventBus } from "./eventBus.js";
-import { GameStore } from "./gameStore.js";
+import { GameNotFoundError, GameStore } from "./gameStore.js";
+
+const createGameRequestSchema = z.object({
+  name: z.string().min(1),
+});
 
 export function createApp(store = new GameStore(), bus = new EventBus()): Hono {
   const app = new Hono();
 
+  app.use("*", cors());
+
   app.get("/health", (c) => c.json({ ok: true }));
 
-  app.get("/game", (c) => c.json(store.getView()));
-
-  app.post("/game/new", async (c) => {
-    const request = newGameRequestSchema.parse(await c.req.json());
-    const view = store.newGame(request);
-    return c.json({ view });
+  app.post("/games", async (c) => {
+    const request = createGameRequestSchema.parse(await c.req.json());
+    return c.json(store.create(request.name), 201);
   });
 
-  app.post("/game/commands", async (c) => {
+  app.get("/games/:gameId", (c) => c.json(store.get(c.req.param("gameId"))));
+
+  app.post("/games/:gameId/commands", async (c) => {
+    const gameId = c.req.param("gameId");
     const command = gameCommandSchema.parse(await c.req.json());
-    const response = store.apply(command);
+    const response = store.apply(gameId, command);
     bus.publish({
       type: "game.event",
+      gameId,
       revision: response.view.revision,
       event: response.event,
       view: response.view,
@@ -31,13 +39,19 @@ export function createApp(store = new GameStore(), bus = new EventBus()): Hono {
     return c.json(response);
   });
 
-  app.get("/game/events", (c) => c.json({ events: store.getEvents() }));
+  app.get("/games/:gameId/events", (c) => {
+    return c.json({ events: store.getEvents(c.req.param("gameId")) });
+  });
 
-  app.get("/game/events/stream", (c) => {
+  app.get("/games/:gameId/events/stream", (c) => {
+    const gameId = c.req.param("gameId");
+    store.get(gameId);
+
     return streamSSE(c, async (stream) => {
       const queue: string[] = [];
       let notify: (() => void) | undefined;
       const unsubscribe = bus.subscribe((message) => {
+        if (message.gameId !== gameId) return;
         queue.push(JSON.stringify(message));
         notify?.();
       });
@@ -66,6 +80,9 @@ export function createApp(store = new GameStore(), bus = new EventBus()): Hono {
     }
     if (err instanceof GameCommandError) {
       return c.json({ error: "command_error", message: err.message }, 400);
+    }
+    if (err instanceof GameNotFoundError) {
+      return c.json({ error: "not_found", message: err.message }, 404);
     }
     console.error(err);
     return c.json({ error: "internal_server_error" }, 500);

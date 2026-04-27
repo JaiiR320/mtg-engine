@@ -1,39 +1,83 @@
-import { applyCommand, createGame, emptyGame, toGameView } from "@mtg-engine/core";
-import type {
-  CommandResponse,
-  GameCommand,
-  GameEvent,
-  GameState,
-  GameView,
-  NewGameRequest,
-} from "@mtg-engine/schemas";
+import { applyCommand, createGame, createId, toGameView } from "@mtg-engine/core";
+import type { GameCommand, GameEvent, GameState, GameView } from "@mtg-engine/schemas";
+
+export type GameMetadata = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GameResponse = {
+  game: GameMetadata;
+  view: GameView;
+};
+
+export type GameCommandResponse = GameResponse & {
+  event: GameEvent;
+};
+
+type GameRecord = GameMetadata & {
+  state: GameState;
+};
+
+export class GameNotFoundError extends Error {
+  constructor(gameId: string) {
+    super(`game not found: ${gameId}`);
+    this.name = "GameNotFoundError";
+  }
+}
 
 export class GameStore {
-  private state: GameState = emptyGame();
+  private games = new Map<string, GameRecord>();
 
-  getState(): GameState {
-    return this.state;
+  create(name: string): GameResponse {
+    const now = new Date().toISOString();
+    const record: GameRecord = {
+      id: createId("game"),
+      name,
+      createdAt: now,
+      updatedAt: now,
+      state: createGame({ players: [] }),
+    };
+    this.games.set(record.id, record);
+    return this.toResponse(record);
   }
 
-  getView(): GameView {
-    return toGameView(this.state);
+  get(gameId: string): GameResponse {
+    return this.toResponse(this.requireGame(gameId));
   }
 
-  getEvents(): GameEvent[] {
-    return this.state.eventLog;
+  getEvents(gameId: string): GameEvent[] {
+    return this.requireGame(gameId).state.eventLog;
   }
 
-  newGame(request: NewGameRequest): GameView {
-    this.state = createGame(request);
-    return this.getView();
-  }
-
-  apply(command: GameCommand): CommandResponse {
-    const result = applyCommand(this.state, command);
-    this.state = result.state;
+  apply(gameId: string, command: GameCommand): GameCommandResponse {
+    const record = this.requireGame(gameId);
+    const result = applyCommand(record.state, command);
+    record.state = result.state;
+    record.updatedAt = new Date().toISOString();
     return {
-      view: this.getView(),
+      ...this.toResponse(record),
       event: result.event,
+    };
+  }
+
+  private requireGame(gameId: string): GameRecord {
+    const record = this.games.get(gameId);
+    if (!record) throw new GameNotFoundError(gameId);
+    return record;
+  }
+
+  private toResponse(record: GameRecord): GameResponse {
+    return {
+      game: {
+        id: record.id,
+        name: record.name,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      },
+      view: toGameView(record.state),
     };
   }
 }

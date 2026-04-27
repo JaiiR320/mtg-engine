@@ -12,6 +12,7 @@ export const commandResponseSchema = z.object({
 
 export const gameEventStreamMessageSchema = z.object({
   type: z.literal("game.event"),
+  gameId: z.string().min(1),
   revision: z.number().int().nonnegative(),
   event: gameEventSchema,
   view: gameViewSchema,
