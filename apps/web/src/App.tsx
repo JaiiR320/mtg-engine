@@ -200,7 +200,6 @@ export function GamePage() {
           </button>
         </div>
 
-        <p className="empty-text">Strict JSON only: use 2, not +2.</p>
         <textarea
           className="command-input"
           spellCheck={false}
@@ -253,9 +252,9 @@ function GameStateView({ response, identity }: { response: GameResponse; identit
           <p className="eyebrow">{response.game.name}</p>
           <h1>Core State Console</h1>
           <p className="empty-text">You are {identity.name}</p>
+          <p className="empty-text">Game ID {response.game.id}</p>
         </div>
         <dl className="state-grid">
-          <Stat label="Game ID" value={response.game.id} />
           <Stat label="Revision" value={view.revision} />
           <Stat label="Turn" value={view.turnNumber ?? "-"} />
           <Stat label="Phase" value={view.phase ?? "-"} />
