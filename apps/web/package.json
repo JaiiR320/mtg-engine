@@ -7,7 +7,8 @@
     "build": "tsc -p tsconfig.json && vite build",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}"
   },
   "dependencies": {
     "@mtg-engine/schemas": "workspace:*",
