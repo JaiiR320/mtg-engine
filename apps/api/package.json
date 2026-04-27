@@ -6,7 +6,7 @@
   "main": "dist/apps/api/src/server.js",
   "types": "dist/apps/api/src/server.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @mtg-engine/schemas build && pnpm --filter @mtg-engine/core build && tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/apps/api/src/server.js"
