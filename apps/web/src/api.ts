@@ -1,6 +1,6 @@
 import type { GameCommand, GameEvent, GameView } from "@mtg-engine/schemas";
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
 export type GameMetadata = {
   id: string;
@@ -49,4 +49,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
   return body as T;
+}
+
+function normalizeApiBaseUrl(value: string | undefined): string {
+  const baseUrl = (value ?? "http://localhost:3000").trim().replace(/\/$/, "");
+  if (baseUrl.startsWith("http://") || baseUrl.startsWith("https://")) return baseUrl;
+  if (baseUrl.startsWith("localhost") || baseUrl.startsWith("127.0.0.1")) {
+    return `http://${baseUrl}`;
+  }
+  return `https://${baseUrl}`;
 }
