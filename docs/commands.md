@@ -29,9 +29,16 @@ Example zone refs:
 
 ## Player Commands
 
+- `player.add`: add a player seat with required `id` and `name`.
 - `player.adjustLife`: add a signed integer delta to a player's life.
 - `player.setLife`: set a player's life total.
 - `player.setCounters`: replace all counters on a player.
+
+```json
+{ "type": "player.add", "player": { "id": "p1", "name": "Jair" } }
+```
+
+`player.add` starts the player at `0` life with no counters and empty library, hand, and graveyard zones. It does not set active player, priority player, turn state, starting life, or deck contents.
 
 ```json
 { "type": "player.adjustLife", "playerId": "p1", "delta": -3 }

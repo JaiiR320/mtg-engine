@@ -10,7 +10,7 @@ Core is a TypeScript state library, not a backend. Hosts can call `createGame`, 
 
 ## State Model
 
-Core tracks one game state with ID `single`.
+Core tracks one game state with ID `single`. API game IDs are host-level metadata and do not change the core state ID.
 
 Game state contains:
 
@@ -59,11 +59,12 @@ This means views expose all zones and hidden information. Add private or player-
 
 ## API Store
 
-`GameStore` is an optional in-memory host with a single current state.
+`GameStore` is an optional in-memory host with multiple current game records.
 
-- Server restart loses game state.
-- `POST /game/new` replaces the current state.
-- Commands mutate the stored state by replacing it with the reducer result.
+- Server restart loses all game records.
+- `POST /games` creates a named, empty game record with a generated API game ID.
+- Commands mutate one stored game by replacing that record's state with the reducer result.
+- API game metadata includes `id`, `name`, `createdAt`, and `updatedAt`.
 
 ## Rules Reference
 

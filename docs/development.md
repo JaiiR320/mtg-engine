@@ -4,6 +4,7 @@
 
 ```text
 apps/api/            Hono HTTP API and in-memory game store
+apps/web/            Vite React debug UI
 packages/core/       Game creation, reducer, events, IDs, and views
 packages/schemas/    Zod schemas and exported TypeScript types
 rules/               Markdown Magic rules reference
@@ -21,6 +22,7 @@ pnpm test
 pnpm format
 pnpm format:check
 pnpm dev:api
+pnpm dev:web
 ```
 
 Package scripts are wired through the workspace. `build` and `check` run recursively across packages and apps.
