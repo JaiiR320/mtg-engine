@@ -58,6 +58,23 @@ function mutate(
   command: Exclude<GameCommand, { type: "state.replace" }>,
 ): string {
   switch (command.type) {
+    case "player.add": {
+      if (state.players.some((player) => player.id === command.player.id)) {
+        throw new GameCommandError(`duplicate player id: ${command.player.id}`);
+      }
+      state.players.push({
+        id: command.player.id,
+        name: command.player.name,
+        life: 0,
+        counters: [],
+        zones: {
+          library: { objects: [] },
+          hand: { objects: [] },
+          graveyard: { objects: [] },
+        },
+      });
+      return `Added player ${command.player.name}`;
+    }
     case "player.adjustLife": {
       const player = requirePlayer(state, command.playerId);
       player.life += command.delta;

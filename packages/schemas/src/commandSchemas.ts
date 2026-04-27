@@ -14,6 +14,11 @@ import {
 
 const insertIndexSchema = z.number().int().nonnegative();
 
+const playerAddInputSchema = z.object({
+  id: playerIdSchema,
+  name: z.string().min(1),
+});
+
 const objectCreateInputSchema = z.object({
   kind: objectKindSchema,
   name: z.string().min(1),
@@ -43,8 +48,7 @@ export const newGameRequestSchema = z.object({
         command: z.array(z.string().min(1)).optional(),
       }),
     )
-    .min(1)
-    .max(4),
+    .default([]),
   activePlayerId: playerIdSchema.optional(),
   priorityPlayerId: playerIdSchema.optional(),
   turnNumber: z.number().int().nonnegative().optional(),
@@ -53,6 +57,10 @@ export const newGameRequestSchema = z.object({
 });
 
 export const gameCommandSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("player.add"),
+    player: playerAddInputSchema,
+  }),
   z.object({
     type: z.literal("player.adjustLife"),
     playerId: playerIdSchema,

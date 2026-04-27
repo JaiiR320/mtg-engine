@@ -21,6 +21,56 @@ describe("virtual table engine", () => {
     expect(toGameView(game).viewMode).toBe("debug");
   });
 
+  it("creates an empty game and adds players by command", () => {
+    let game = createGame({ players: [] });
+
+    expect(game.players).toEqual([]);
+    expect(game.activePlayerId).toBeUndefined();
+    expect(game.priorityPlayerId).toBeUndefined();
+
+    const result = applyCommand(game, {
+      type: "player.add",
+      player: { id: "p1", name: "Jair" },
+    });
+    game = result.state;
+
+    expect(game.players).toHaveLength(1);
+    expect(game.players[0]).toMatchObject({
+      id: "p1",
+      name: "Jair",
+      life: 0,
+      counters: [],
+      zones: {
+        library: { objects: [] },
+        hand: { objects: [] },
+        graveyard: { objects: [] },
+      },
+    });
+    expect(game.activePlayerId).toBeUndefined();
+    expect(game.priorityPlayerId).toBeUndefined();
+    expect(game.revision).toBe(1);
+    expect(result.event.type).toBe("player.add");
+    expect(result.event.message).toBe("Added player Jair");
+  });
+
+  it("rejects duplicate added player IDs", () => {
+    const game = createGame({ players: [{ id: "p1", name: "Jair" }] });
+
+    expect(() =>
+      applyCommand(game, { type: "player.add", player: { id: "p1", name: "Duplicate" } }),
+    ).toThrow("duplicate player id: p1");
+  });
+
+  it("validates player add command shape", () => {
+    expect(
+      gameCommandSchema.safeParse({ type: "player.add", player: { id: "p1", name: "Jair" } })
+        .success,
+    ).toBe(true);
+    expect(
+      gameCommandSchema.safeParse({ type: "player.add", player: { name: "Jair" } }).success,
+    ).toBe(false);
+  });
+
   it("rejects incoherent initial player IDs", () => {
     expect(() =>
       createGame({
